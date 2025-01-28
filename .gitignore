@@ -1,8 +1,8 @@
-input_data/
+input_data/*
 !input_data/.gitkeep
-output_data/
+output_data/*
 !output_data/.gitkeep
-checkpoints/
+checkpoints/*
 !checkpoints/.gitkeep
-images_data/
+images_data/*
 !images_data/.gitkeep
