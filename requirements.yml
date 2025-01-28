@@ -1,0 +1,10 @@
+name: aurora
+channels:
+  - conda-forge
+dependencies:
+  - python
+  - microsoft-aurora
+  - xarray
+  - cdsapi
+  - netcdf4 
+  - matplotlib
