@@ -4,6 +4,7 @@ from datetime import datetime
 from aurora import AuroraSmall, Batch, Metadata
 import matplotlib.pyplot as plt
 from tqdm import trange
+from typing import OrderedDict
 
 torch.manual_seed(0)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -15,6 +16,59 @@ model_path = os.path.join(checkpoints_dir, model_name)
 model = AuroraSmall()
 
 model.load_checkpoint_local(model_path)
+
+
+class ModuleHook:
+    def __init__(self, module):
+        self.hook = module.register_forward_hook(self.hook_fn)
+        self.module = None
+        self.features = None
+
+    def hook_fn(self, module, input_placeholder, output):
+        self.module = module
+        self.features = output
+
+    def close(self):
+        # This doesn't actually do anything
+        self.hook.remove()
+
+
+def hook_model(model, image_f, return_hooks=False):
+    features = OrderedDict()
+
+    # recursive hooking function
+    def hook_layers(net, prefix=[]):
+        if hasattr(net, "_modules"):
+            for name, layer in net._modules.items():
+                if layer is None:
+                    # e.g. GoogLeNet's aux1 and aux2 layers
+                    continue
+                features["_".join(prefix + [name])] = ModuleHook(layer)
+                hook_layers(layer, prefix=prefix + [name])
+
+    hook_layers(model)
+
+    def hook(layer):
+        if layer == "input":
+            out = image_f()
+        elif layer == "labels":
+            out = list(features.values())[-1].features
+        else:
+            assert layer in features, (
+                f"Invalid layer {layer}. Retrieve the list of layers with `lucent.modelzoo.util.get_model_layers(model)`."
+            )
+            out = features[layer].features
+        assert out is not None, (
+            "There are no saved feature maps. Make sure to put the model in eval mode, like so: `model.to(device).eval()`. See README for example."
+        )
+        return out
+
+    if return_hooks:
+        return hook, features
+    return hook
+
+
+hook, features = hook_model(model, None, return_hooks=True)
 
 lat = 180
 lon = 360
@@ -41,8 +95,8 @@ batch = Batch(
 # Store the original data for comparison
 original_2t = batch.surf_vars["2t"].clone().detach()
 
-n_epochs = 20
-learning_rate = 0.05
+n_epochs = 10
+learning_rate = 0.5
 
 # Define optimizer for the input data
 optimizer = torch.optim.Adam(
@@ -65,49 +119,28 @@ optimizer = torch.optim.Adam(
 
 model.eval()  # Set model to evaluation mode
 
-for _ in trange(n_epochs):
+pbar = trange(n_epochs, desc="loss: -")
+for _ in pbar:
     optimizer.zero_grad()  # Zero gradients
 
     predictions = model(batch)
 
     # Define a loss function based on your task
-    loss = predictions.surf_vars["2t"].mean()
+    # loss = predictions.surf_vars["2t"].mean()
+    loss = -hook("encoder").mean()
 
     loss.backward()  # Calculate gradients
 
     optimizer.step()  # Update Parameters from gradients
+    pbar.set_description(f"loss: {loss:.2f}")
 
-# # Visualize the optimized input data
-# plt.figure(figsize=(12, 6))
-# plt.imshow(
-#     batch.surf_vars["2t"][0, 0].detach().numpy(), cmap="coolwarm", origin="lower"
-# )
-# plt.colorbar(label="Temperature (°C)")
-# plt.title("T2M Weather Data Visualization")
-# plt.xlabel("Longitude Index")
-# plt.ylabel("Latitude Index")
-# plt.show()
-
-# Visualize the original and optimized input data
+# Visualize the optimized input data
 plt.figure(figsize=(12, 6))
-
-# Original data
-plt.subplot(1, 2, 1)
-plt.imshow(original_2t[0, 0].numpy(), cmap="coolwarm", origin="lower")
-plt.colorbar(label="Temperature (°C)")
-plt.title("Original T2M Weather Data")
-plt.xlabel("Longitude Index")
-plt.ylabel("Latitude Index")
-
-# Optimized data
-plt.subplot(1, 2, 2)
 plt.imshow(
     batch.surf_vars["2t"][0, 0].detach().numpy(), cmap="coolwarm", origin="lower"
 )
 plt.colorbar(label="Temperature (°C)")
-plt.title("Optimized T2M Weather Data")
+plt.title("T2M Weather Data Visualization")
 plt.xlabel("Longitude Index")
 plt.ylabel("Latitude Index")
-
-plt.tight_layout()
 plt.show()
