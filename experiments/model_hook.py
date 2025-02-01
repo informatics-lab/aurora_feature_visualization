@@ -7,6 +7,9 @@ import numpy as np
 from tqdm import trange
 from typing import OrderedDict
 
+torch.manual_seed(0)
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 checkpoints_dir = "checkpoints"
 model_name = "aurora-0.25-small-pretrained.ckpt"
 model_path = os.path.join(checkpoints_dir, model_name)
@@ -18,9 +21,17 @@ model.load_checkpoint_local(model_path)
 lat = 180
 lon = 360
 batch = Batch(
-    surf_vars={k: torch.randn(1, 2, lat, lon) for k in ("2t", "10u", "10v", "msl")},
-    static_vars={k: torch.randn(lat, lon) for k in ("lsm", "z", "slt")},
-    atmos_vars={k: torch.randn(1, 2, 4, lat, lon) for k in ("z", "u", "v", "t", "q")},
+    surf_vars={
+        k: torch.randn(1, 2, lat, lon).requires_grad_(True)
+        for k in ("2t", "10u", "10v", "msl")
+    },
+    static_vars={
+        k: torch.randn(lat, lon).requires_grad_(True) for k in ("lsm", "z", "slt")
+    },
+    atmos_vars={
+        k: torch.randn(1, 2, 4, lat, lon).requires_grad_(True)
+        for k in ("z", "u", "v", "t", "q")
+    },
     metadata=Metadata(
         lat=torch.linspace(90, -90, lat),
         lon=torch.linspace(0, 360, lon + 1)[:-1],
@@ -29,15 +40,27 @@ batch = Batch(
     ),
 )
 
+
 class ModuleHook:
     def __init__(self, module):
         self.hook = module.register_forward_hook(self.hook_fn)
         self.module = None
         self.features = None
 
-    def hook_fn(self, module, input, output):
+    def hook_fn(self, module, input_placeholder, output):
         self.module = module
-        self.features = output
+        # self.features = output
+
+        if torch.is_tensor(output):
+            self.features = output.clone().detach().requires_grad_(True)
+            # print(f"Tensor layer: {type(self.module).__name__}")
+
+        elif isinstance(output, tuple):
+            # print(f"Tuple layer: {type(self.module).__name__}")
+            pass
+        else:
+            # print(f"unexpected type: {type(output).__name__}")
+            pass
 
     def close(self):
         # This doesn't actually do anything
@@ -65,18 +88,70 @@ def hook_model(model, image_f, return_hooks=False):
         elif layer == "labels":
             out = list(features.values())[-1].features
         else:
-            assert layer in features, f"Invalid layer {layer}. Retrieve the list of layers with `lucent.modelzoo.util.get_model_layers(model)`."
+            assert layer in features, (
+                f"Invalid layer {layer}. Retrieve the list of layers with `lucent.modelzoo.util.get_model_layers(model)`."
+            )
             out = features[layer].features
-        assert out is not None, "There are no saved feature maps. Make sure to put the model in eval mode, like so: `model.to(device).eval()`. See README for example."
+        assert out is not None, (
+            "There are no saved feature maps. Make sure to put the model in eval mode, like so: `model.to(device).eval()`. See README for example."
+        )
         return out
 
     if return_hooks:
         return hook, features
     return hook
 
-model.eval()
-hook, features = hook_model(model, None, return_hooks=True)
-prediction = model(batch)
 
+# class AdamInput(torch.optim.Adam):
+#     pass
+
+n_epochs = 2
+learning_rate = 0.05
+
+hook, features = hook_model(model, None, return_hooks=True)
+
+prediction = model(batch)
 # print(features["encoder"].features)
 print(hook("encoder"))
+
+# optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+optimizer = torch.optim.Adam([batch.surf_vars["2t"]], lr=learning_rate)
+
+# print(batch.surf_vars["2t"].shape)
+# print(batch.surf_vars["2t"].mean())
+
+# print(batch.surf_vars["2t"])
+model.train()
+for _ in trange(n_epochs):
+    # print(batch.surf_vars["2t"])
+    predictions = model(batch)
+
+    loss = predictions.surf_vars["2t"].mean()
+
+    # loss = -hook("encoder").mean()
+    print(loss)
+
+    loss.backward()  # Calculate gradients
+
+    optimizer.step()  # Update Parameters from gradients
+    # optimizer.zero_grad()  # Reset gradients
+    # print()
+
+# print(batch.surf_vars["2t"])
+print(hook("encoder"))
+
+# print(batch.surf_vars["2t"].grad)
+
+# print(batch.surf_vars["2t"].detach().numpy().shape)
+
+# plt.figure(figsize=(12, 6))  # Adjust figure size if needed
+# plt.imshow(
+#     batch.surf_vars["2t"][0, 0].detach().numpy(), cmap="coolwarm", origin="lower"
+# )  # Use a suitable colormap
+# plt.colorbar(label="Temperature (°C)")  # Add a colorbar
+# plt.title("T2M Weather Data Visualization")
+# plt.xlabel("Longitude Index")
+# plt.ylabel("Latitude Index")
+#
+# # Show the plot
+# plt.show()
