@@ -2,6 +2,9 @@ import os
 import torch
 from datetime import datetime
 from aurora import AuroraSmall, Batch, Metadata
+import matplotlib.pyplot as plt
+import numpy as np
+from tqdm import trange
 from typing import OrderedDict
 
 torch.manual_seed(0)
@@ -44,7 +47,7 @@ class ModuleHook:
         self.module = None
         self.features = None
 
-    def hook_fn(self, module, input_placeholder, output):
+    def hook_fn(self, module, input, output):
         self.module = module
         self.features = output
 
@@ -88,7 +91,56 @@ def hook_model(model, image_f, return_hooks=False):
     return hook
 
 
+# class AdamInput(torch.optim.Adam):
+#     pass
+
+n_epochs = 2
+learning_rate = 0.05
+
 hook, features = hook_model(model, None, return_hooks=True)
 
 prediction = model(batch)
+# print(features["encoder"].features)
 print(hook("encoder"))
+
+# optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+optimizer = torch.optim.Adam([batch.surf_vars["2t"]], lr=learning_rate)
+
+# print(batch.surf_vars["2t"].shape)
+# print(batch.surf_vars["2t"].mean())
+
+# print(batch.surf_vars["2t"])
+model.train()
+for _ in trange(n_epochs):
+    # print(batch.surf_vars["2t"])
+    predictions = model(batch)
+
+    loss = predictions.surf_vars["2t"].mean()
+
+    # loss = -hook("encoder").mean()
+    print(loss)
+
+    loss.backward()  # Calculate gradients
+
+    optimizer.step()  # Update Parameters from gradients
+    # optimizer.zero_grad()  # Reset gradients
+    # print()
+
+# print(batch.surf_vars["2t"])
+print(hook("encoder"))
+
+# print(batch.surf_vars["2t"].grad)
+
+# print(batch.surf_vars["2t"].detach().numpy().shape)
+
+# plt.figure(figsize=(12, 6))  # Adjust figure size if needed
+# plt.imshow(
+#     batch.surf_vars["2t"][0, 0].detach().numpy(), cmap="coolwarm", origin="lower"
+# )  # Use a suitable colormap
+# plt.colorbar(label="Temperature (°C)")  # Add a colorbar
+# plt.title("T2M Weather Data Visualization")
+# plt.xlabel("Longitude Index")
+# plt.ylabel("Latitude Index")
+#
+# # Show the plot
+# plt.show()
