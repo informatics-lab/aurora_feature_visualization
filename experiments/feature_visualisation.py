@@ -24,7 +24,7 @@ class ModuleHook:
         self.module = None
         self.features = None
 
-    def hook_fn(self, module, input_placeholder, output):
+    def hook_fn(self, module, input, output):
         self.module = module
         self.features = output
 
@@ -41,7 +41,6 @@ def hook_model(model, image_f, return_hooks=False):
         if hasattr(net, "_modules"):
             for name, layer in net._modules.items():
                 if layer is None:
-                    # e.g. GoogLeNet's aux1 and aux2 layers
                     continue
                 features["_".join(prefix + [name])] = ModuleHook(layer)
                 hook_layers(layer, prefix=prefix + [name])
@@ -92,9 +91,6 @@ batch = Batch(
     ),
 )
 
-# Store the original data for comparison
-original_2t = batch.surf_vars["2t"].clone().detach()
-
 n_epochs = 10
 learning_rate = 0.5
 
@@ -117,21 +113,18 @@ optimizer = torch.optim.Adam(
     lr=learning_rate,
 )
 
-model.eval()  # Set model to evaluation mode
+model.eval()
 
 pbar = trange(n_epochs, desc="loss: -")
 for _ in pbar:
-    optimizer.zero_grad()  # Zero gradients
+    optimizer.zero_grad()
 
     predictions = model(batch)
 
-    # Define a loss function based on your task
-    # loss = predictions.surf_vars["2t"].mean()
     loss = -hook("encoder").mean()
+    loss.backward()
 
-    loss.backward()  # Calculate gradients
-
-    optimizer.step()  # Update Parameters from gradients
+    optimizer.step()
     pbar.set_description(f"loss: {loss:.2f}")
 
 # Visualize the optimized input data
