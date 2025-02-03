@@ -97,16 +97,16 @@ learning_rate = 0.05
 vars = [
     batch.surf_vars["2t"],
     batch.surf_vars["10u"],
-    # batch.surf_vars["10v"],
-    # batch.surf_vars["msl"],
-    # batch.static_vars["lsm"],
-    # batch.static_vars["z"],
-    # batch.static_vars["slt"],
-    # batch.atmos_vars["z"],
-    # batch.atmos_vars["u"],
-    # batch.atmos_vars["v"],
-    # batch.atmos_vars["t"],
-    # batch.atmos_vars["q"],
+    batch.surf_vars["10v"],
+    batch.surf_vars["msl"],
+    batch.static_vars["lsm"],
+    batch.static_vars["z"],
+    batch.static_vars["slt"],
+    batch.atmos_vars["z"],
+    batch.atmos_vars["u"],
+    batch.atmos_vars["v"],
+    batch.atmos_vars["t"],
+    batch.atmos_vars["q"],
 ]
 
 # Define optimizer for the input data
@@ -131,8 +131,8 @@ rollout_steps = 2
 surface_vars = [
     batch.surf_vars["2t"],
     batch.surf_vars["10u"],
-    # batch.surf_vars["10v"],
-    # batch.surf_vars["msl"],
+    batch.surf_vars["10v"],
+    batch.surf_vars["msl"],
 ]
 fig, axes = plt.subplots(
     len(surface_vars), rollout_steps, figsize=(15, len(surface_vars) * 5)
@@ -146,42 +146,3 @@ for i, var_data in enumerate(surface_vars):
 
 plt.tight_layout()
 plt.show()
-
-# fig, axes = plt.subplots(3, 2, figsize=(15, 20))
-#
-# for i, var_data in enumerate(
-#     [
-#         batch.static_vars["lsm"],
-#         batch.static_vars["z"],
-#         batch.static_vars["slt"],
-#     ]
-# ):
-#     ax = axes[i]
-#     im = ax.imshow(var_data.detach().numpy(), cmap="coolwarm", origin="lower")
-#     ax.set_xlabel("Longitude Index")
-#     ax.set_ylabel("Latitude Index")
-#
-# plt.tight_layout()
-# plt.show()
-
-# fig, axes = plt.subplots(5, 2, figsize=(15, 20))
-#
-# for i, var_data in enumerate(
-#     [
-#         batch.atmos_vars["z"],
-#         batch.atmos_vars["u"],
-#         batch.atmos_vars["v"],
-#         batch.atmos_vars["t"],
-#         batch.atmos_vars["q"],
-#     ]
-# ):
-#     for j in range(2):
-#         ax = axes[i, j]
-#         im = ax.imshow(
-#             var_data[0, j, 0].detach().numpy(), cmap="coolwarm", origin="lower"
-#         )
-#         ax.set_xlabel("Longitude Index")
-#         ax.set_ylabel("Latitude Index")
-#
-# plt.tight_layout()
-# plt.show()

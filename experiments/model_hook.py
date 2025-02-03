@@ -2,7 +2,7 @@ import os
 import torch
 from datetime import datetime
 from aurora import AuroraSmall, Batch, Metadata
-from typing import OrderedDict
+from hooks import hook_model
 
 torch.manual_seed(0)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -19,14 +19,14 @@ lat = 180
 lon = 360
 batch = Batch(
     surf_vars={
-        k: torch.randn(1, 2, lat, lon).requires_grad_(True)
+        k: torch.randn(1, 2, lat, lon)
         for k in ("2t", "10u", "10v", "msl")
     },
     static_vars={
-        k: torch.randn(lat, lon).requires_grad_(True) for k in ("lsm", "z", "slt")
+        k: torch.randn(lat, lon) for k in ("lsm", "z", "slt")
     },
     atmos_vars={
-        k: torch.randn(1, 2, 4, lat, lon).requires_grad_(True)
+        k: torch.randn(1, 2, 4, lat, lon)
         for k in ("z", "u", "v", "t", "q")
     },
     metadata=Metadata(
@@ -37,59 +37,12 @@ batch = Batch(
     ),
 )
 
-
-class ModuleHook:
-    def __init__(self, module):
-        self.hook = module.register_forward_hook(self.hook_fn)
-        self.module = None
-        self.features = None
-
-    def hook_fn(self, module, input_placeholder, output):
-        self.module = module
-        self.features = output
-
-    def close(self):
-        # This doesn't actually do anything
-        self.hook.remove()
-
-
-def hook_model(model, image_f, return_hooks=False):
-    features = OrderedDict()
-
-    # recursive hooking function
-    def hook_layers(net, prefix=[]):
-        if hasattr(net, "_modules"):
-            for name, layer in net._modules.items():
-                if layer is None:
-                    # e.g. GoogLeNet's aux1 and aux2 layers
-                    continue
-                features["_".join(prefix + [name])] = ModuleHook(layer)
-                hook_layers(layer, prefix=prefix + [name])
-
-    hook_layers(model)
-
-    def hook(layer):
-        if layer == "input":
-            out = image_f()
-        elif layer == "labels":
-            out = list(features.values())[-1].features
-        else:
-            assert layer in features, (
-                f"Invalid layer {layer}. Retrieve the list of layers with `lucent.modelzoo.util.get_model_layers(model)`."
-            )
-            out = features[layer].features
-        assert out is not None, (
-            "There are no saved feature maps. Make sure to put the model in eval mode, like so: `model.to(device).eval()`. See README for example."
-        )
-        return out
-
-    if return_hooks:
-        return hook, features
-    return hook
-
-
 hook, features = hook_model(model, None, return_hooks=True)
 
 prediction = model(batch)
-# print(hook("encoder"))
-print(features)
+
+for layer in features.keys():
+    print(layer)
+
+print()
+print(hook("backbone.encoder_layers.0.blocks.1.mlp.act").shape)
