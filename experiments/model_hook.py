@@ -91,4 +91,5 @@ def hook_model(model, image_f, return_hooks=False):
 hook, features = hook_model(model, None, return_hooks=True)
 
 prediction = model(batch)
-print(hook("encoder"))
+# print(hook("encoder"))
+print(features)

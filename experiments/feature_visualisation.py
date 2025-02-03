@@ -91,49 +91,97 @@ batch = Batch(
     ),
 )
 
-n_epochs = 10
-learning_rate = 0.5
+neuron_idx = 1
+n_epochs = 100
+learning_rate = 0.05
+vars = [
+    batch.surf_vars["2t"],
+    batch.surf_vars["10u"],
+    # batch.surf_vars["10v"],
+    # batch.surf_vars["msl"],
+    # batch.static_vars["lsm"],
+    # batch.static_vars["z"],
+    # batch.static_vars["slt"],
+    # batch.atmos_vars["z"],
+    # batch.atmos_vars["u"],
+    # batch.atmos_vars["v"],
+    # batch.atmos_vars["t"],
+    # batch.atmos_vars["q"],
+]
 
 # Define optimizer for the input data
 optimizer = torch.optim.Adam(
-    [
-        batch.surf_vars["2t"],
-        batch.surf_vars["10u"],
-        batch.surf_vars["10v"],
-        batch.surf_vars["msl"],
-        batch.static_vars["lsm"],
-        batch.static_vars["z"],
-        batch.static_vars["slt"],
-        batch.atmos_vars["z"],
-        batch.atmos_vars["u"],
-        batch.atmos_vars["v"],
-        batch.atmos_vars["t"],
-        batch.atmos_vars["q"],
-    ],
+    vars,
     lr=learning_rate,
 )
 
 model.eval()
-
 pbar = trange(n_epochs, desc="loss: -")
 for _ in pbar:
     optimizer.zero_grad()
-
     predictions = model(batch)
 
-    loss = -hook("encoder").mean()
+    loss = -hook("backbone_encoder_layers_0_blocks_1_mlp_act")[0, :, neuron_idx].mean()
     loss.backward()
-
     optimizer.step()
+
     pbar.set_description(f"loss: {loss:.2f}")
 
-# Visualize the optimized input data
-plt.figure(figsize=(12, 6))
-plt.imshow(
-    batch.surf_vars["2t"][0, 0].detach().numpy(), cmap="coolwarm", origin="lower"
+rollout_steps = 2
+surface_vars = [
+    batch.surf_vars["2t"],
+    batch.surf_vars["10u"],
+    # batch.surf_vars["10v"],
+    # batch.surf_vars["msl"],
+]
+fig, axes = plt.subplots(
+    len(surface_vars), rollout_steps, figsize=(15, len(surface_vars) * 5)
 )
-plt.colorbar(label="Temperature (°C)")
-plt.title("T2M Weather Data Visualization")
-plt.xlabel("Longitude Index")
-plt.ylabel("Latitude Index")
+for i, var_data in enumerate(surface_vars):
+    for j in range(rollout_steps):
+        ax = axes[i, j]
+        im = ax.imshow(var_data[0, j].detach().numpy(), cmap="coolwarm", origin="lower")
+        ax.set_xlabel("Longitude Index")
+        ax.set_ylabel("Latitude Index")
+
+plt.tight_layout()
 plt.show()
+
+# fig, axes = plt.subplots(3, 2, figsize=(15, 20))
+#
+# for i, var_data in enumerate(
+#     [
+#         batch.static_vars["lsm"],
+#         batch.static_vars["z"],
+#         batch.static_vars["slt"],
+#     ]
+# ):
+#     ax = axes[i]
+#     im = ax.imshow(var_data.detach().numpy(), cmap="coolwarm", origin="lower")
+#     ax.set_xlabel("Longitude Index")
+#     ax.set_ylabel("Latitude Index")
+#
+# plt.tight_layout()
+# plt.show()
+
+# fig, axes = plt.subplots(5, 2, figsize=(15, 20))
+#
+# for i, var_data in enumerate(
+#     [
+#         batch.atmos_vars["z"],
+#         batch.atmos_vars["u"],
+#         batch.atmos_vars["v"],
+#         batch.atmos_vars["t"],
+#         batch.atmos_vars["q"],
+#     ]
+# ):
+#     for j in range(2):
+#         ax = axes[i, j]
+#         im = ax.imshow(
+#             var_data[0, j, 0].detach().numpy(), cmap="coolwarm", origin="lower"
+#         )
+#         ax.set_xlabel("Longitude Index")
+#         ax.set_ylabel("Latitude Index")
+#
+# plt.tight_layout()
+# plt.show()
