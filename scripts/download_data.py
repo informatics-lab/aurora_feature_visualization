@@ -15,9 +15,10 @@ time_points = ["00:00", "06:00", "12:00", "18:00"]
 date_str = f"{year}-{month}-{day}"
 
 # Define the base download path and create a subfolder for the date
-base_download_path = Path("./input_data")
+base_download_path = Path("./data/input_data/era5")
 date_download_path = base_download_path / date_str
 date_download_path.mkdir(parents=True, exist_ok=True)
+
 
 def download_if_not_exists(file_path, request_type, request_params):
     """
@@ -28,6 +29,7 @@ def download_if_not_exists(file_path, request_type, request_params):
         print(f"Downloaded: {file_path.name}")
     else:
         print(f"File already exists: {file_path.name}")
+
 
 # Download the static variables
 static_file = date_download_path / "static.nc"
