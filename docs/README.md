@@ -1,5 +1,7 @@
 # Aurora Feature Visualisation
 
+**Description/Summary**
+
 ## Set up
 
 ### Environments
@@ -18,4 +20,12 @@ curl https://huggingface.co/microsoft/aurora/resolve/main/aurora-0.25-small-pret
 ```bash
 conda activate aurora_fv
 python scripts/download_data.py
+```
+
+## Run Experiments
+Run from root of repo
+
+```bash
+conda activate aurora_fv
+python scripts/experiments/feature_visualisation.py
 ```
