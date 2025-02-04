@@ -1,1 +1,0 @@
-# Aurora Feature Visualisation
