@@ -1,0 +1,6 @@
+import ftt_image
+
+x = ftt_image.fft_image(512)
+
+print(x)
+# print(x.shape)

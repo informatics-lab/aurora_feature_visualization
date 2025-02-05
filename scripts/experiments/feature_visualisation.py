@@ -4,9 +4,10 @@ from datetime import datetime
 from aurora import AuroraSmall, Batch, Metadata
 import matplotlib.pyplot as plt
 from tqdm import trange
-from typing import OrderedDict
+from hooks import hook_specific_layer
 
 torch.manual_seed(0)
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 checkpoints_dir = "checkpoints"
@@ -14,86 +15,59 @@ model_name = "aurora-0.25-small-pretrained.ckpt"
 model_path = os.path.join(checkpoints_dir, model_name)
 
 model = AuroraSmall()
-
 model.load_checkpoint_local(model_path)
 
+# Move the model to the chosen device and set it to evaluation mode.
+model.to(device).eval()
 
-class ModuleHook:
-    def __init__(self, module):
-        self.hook = module.register_forward_hook(self.hook_fn)
-        self.module = None
-        self.features = None
-
-    def hook_fn(self, module, input, output):
-        self.module = module
-        self.features = output
-
-    def close(self):
-        # This doesn't actually do anything
-        self.hook.remove()
-
-
-def hook_model(model, image_f, return_hooks=False):
-    features = OrderedDict()
-
-    # recursive hooking function
-    def hook_layers(net, prefix=[]):
-        if hasattr(net, "_modules"):
-            for name, layer in net._modules.items():
-                if layer is None:
-                    continue
-                features["_".join(prefix + [name])] = ModuleHook(layer)
-                hook_layers(layer, prefix=prefix + [name])
-
-    hook_layers(model)
-
-    def hook(layer):
-        if layer == "input":
-            out = image_f()
-        elif layer == "labels":
-            out = list(features.values())[-1].features
-        else:
-            assert layer in features, (
-                f"Invalid layer {layer}. Retrieve the list of layers with `lucent.modelzoo.util.get_model_layers(model)`."
-            )
-            out = features[layer].features
-        assert out is not None, (
-            "There are no saved feature maps. Make sure to put the model in eval mode, like so: `model.to(device).eval()`. See README for example."
-        )
-        return out
-
-    if return_hooks:
-        return hook, features
-    return hook
-
-
-hook, features = hook_model(model, None, return_hooks=True)
+hook = hook_specific_layer(model, "backbone.encoder_layers.0.blocks.1.mlp.act")
 
 lat = 180
 lon = 360
+
+# Create the batch data on the CPU first.
 batch = Batch(
     surf_vars={
-        k: torch.randn(1, 2, lat, lon, requires_grad=True)
+        k: torch.randn(1, 2, lat, lon, requires_grad=True, device=device)
         for k in ("2t", "10u", "10v", "msl")
     },
     static_vars={
-        k: torch.randn(lat, lon, requires_grad=True) for k in ("lsm", "z", "slt")
+        k: torch.randn(lat, lon, requires_grad=True, device=device)
+        for k in ("lsm", "z", "slt")
     },
     atmos_vars={
-        k: torch.randn(1, 2, 4, lat, lon, requires_grad=True)
+        k: torch.randn(1, 2, 4, lat, lon, requires_grad=True, device=device)
         for k in ("z", "u", "v", "t", "q")
     },
     metadata=Metadata(
-        lat=torch.linspace(90, -90, lat),
-        lon=torch.linspace(0, 360, lon + 1)[:-1],
+        lat=torch.linspace(90, -90, lat, device=device),
+        lon=torch.linspace(0, 360, lon + 1, device=device)[:-1],
         time=(datetime(2020, 6, 1, 12, 0),),
         atmos_levels=(100, 250, 500, 850),
     ),
 )
 
+
+# Move all batch variables to the chosen device.
+def move_batch_to_device(batch_obj, device):
+    for key in batch_obj.surf_vars:
+        batch_obj.surf_vars[key] = batch_obj.surf_vars[key].to(device)
+    for key in batch_obj.static_vars:
+        batch_obj.static_vars[key] = batch_obj.static_vars[key].to(device)
+    for key in batch_obj.atmos_vars:
+        batch_obj.atmos_vars[key] = batch_obj.atmos_vars[key].to(device)
+    # If Metadata has tensors and you need them on the device, move them too.
+    if hasattr(batch_obj.metadata, "lat"):
+        batch_obj.metadata.lat = batch_obj.metadata.lat.to(device)
+    if hasattr(batch_obj.metadata, "lon"):
+        batch_obj.metadata.lon = batch_obj.metadata.lon.to(device)
+
+
+move_batch_to_device(batch, device)
+
 neuron_idx = 1
 n_epochs = 100
-learning_rate = 0.05
+learning_rate = 1e-8
 vars = [
     batch.surf_vars["2t"],
     batch.surf_vars["10u"],
@@ -110,20 +84,19 @@ vars = [
 ]
 
 # Define optimizer for the input data
-optimizer = torch.optim.Adam(
-    vars,
-    lr=learning_rate,
-)
+optimizer = torch.optim.Adam(vars, lr=learning_rate, betas=(0.5, 0.99), eps=1e-8)
+lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, n_epochs, 0.0)
 
-model.eval()
 pbar = trange(n_epochs, desc="loss: -")
 for _ in pbar:
     optimizer.zero_grad()
     predictions = model(batch)
 
-    loss = -hook("backbone_encoder_layers_0_blocks_1_mlp_act")[0, :, neuron_idx].mean()
+    # Calculate loss from one of the hooked layers.
+    loss = -hook.features[0, :, neuron_idx].mean()
     loss.backward()
     optimizer.step()
+    lr_scheduler.step()
 
     pbar.set_description(f"loss: {loss:.2f}")
 
@@ -140,7 +113,10 @@ fig, axes = plt.subplots(
 for i, var_data in enumerate(surface_vars):
     for j in range(rollout_steps):
         ax = axes[i, j]
-        im = ax.imshow(var_data[0, j].detach().numpy(), cmap="coolwarm", origin="lower")
+        # Make sure to transfer the data back to CPU for plotting if needed.
+        im = ax.imshow(
+            var_data[0, j].detach().cpu().numpy(), cmap="coolwarm", origin="lower"
+        )
         ax.set_xlabel("Longitude Index")
         ax.set_ylabel("Latitude Index")
 

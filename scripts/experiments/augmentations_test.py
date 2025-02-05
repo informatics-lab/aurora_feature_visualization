@@ -18,13 +18,13 @@ else:
 
 print(device)
 
-x = torch.linspace(0, 1, 512)
-y = torch.linspace(0, 1, 512)
-grid_x, grid_y = torch.meshgrid(x, y, indexing="ij")
+y = torch.linspace(0, 1, 180)
+x = torch.linspace(0, 1, 360)
+grid_y, grid_x = torch.meshgrid(y, x, indexing="ij")
 
-pattern0 = grid_x
-pattern1 = grid_y
-pattern2 = grid_x * grid_y
+pattern0 = grid_y
+pattern1 = grid_x
+pattern2 = grid_y * grid_x
 
 pattern = torch.stack([pattern0, pattern1, pattern2], dim=0)
 pattern = pattern.unsqueeze(dim=0)
