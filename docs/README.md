@@ -22,10 +22,10 @@ conda activate aurora_fv
 python scripts/download_data.py
 ```
 
-## Run Experiments
+## Run Scripts
 Run from root of repo
 
 ```bash
 conda activate aurora_fv
-python scripts/experiments/feature_visualisation.py
+python scripts/aurora_inference.py
 ```
