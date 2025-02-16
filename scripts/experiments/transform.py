@@ -117,6 +117,80 @@ def preprocess_inceptionv1():
     return lambda x: x * 255 - 117
 
 
+def color_jitter(mean=1.0, std=1.0):
+    """
+    Randomly shifts and scales each image’s channels.
+
+    For an input tensor of shape (B, C, H, W) this function generates a random offset
+    for each image and each channel in the range [-mean, mean] and a random scale factor computed
+    as the exponential of a value in the range [-std, std]. Then it applies:
+       output = (input - offset) / scale
+
+    Args:
+        mean (float): Maximum magnitude of shift. Default is 1.0.
+        std (float): Maximum magnitude (pre-exponentiation) of scaling factor. Default is 1.0.
+                      Note that the actual scale is computed as exp(random_value).
+    Returns:
+        A function that takes an image tensor and returns the color-jittered version.
+    """
+
+    def inner(image_t):
+        b, c, h, w = image_t.shape
+        offset = (torch.rand(b, c, 1, 1, device=image_t.device) - 0.5) * 2 * mean
+        scale = ((torch.rand(b, c, 1, 1, device=image_t.device) - 0.5) * 2 * std).exp()
+        return (image_t - offset) / scale
+
+    return inner
+
+
+def color_jitter_r(mean=1.0, std=1.0):
+    """
+    Reverse the color jitter transformation.
+
+    Given an input tensor of shape (B, C, H, W), this transform computes random
+    per-image offsets (in the range [-mean, mean]) and per-image scaling factors (via exp(),
+    from a value in [-std, std]), and applies the reverse transformation:
+
+         output = (input * scale) + offset
+
+    This is designed to invert a corresponding forward jitter transform of the form:
+         output = (input - offset) / scale
+
+    Args:
+        mean (float): Maximum magnitude for the random offset. Default is 1.0.
+        std (float): Maximum magnitude (before exponentiation) for the random scale factor. Default is 1.0.
+    Returns:
+        A function that takes an image tensor and returns the reversed jitter version.
+    """
+
+    def inner(image_t):
+        b, c, h, w = image_t.shape
+        # Generate random offsets for each image and channel in [-mean, mean]
+        offset = (torch.rand(b, c, 1, 1, device=image_t.device) - 0.5) * 2 * mean
+        # Generate random values for scale in [-std, std] and exponentiate so that scale is in (exp(-std), exp(std))
+        scale = ((torch.rand(b, c, 1, 1, device=image_t.device) - 0.5) * 2 * std).exp()
+        return (image_t * scale) + offset
+
+    return inner
+
+
+def random_scale_vit(scales, target_size=(224, 224)):
+    def inner(image_t):
+        scale = np.random.choice(scales)
+        scale_shape = [int(scale * d) for d in target_size]
+        upsample = torch.nn.Upsample(
+            size=scale_shape, mode="bilinear", align_corners=True
+        )
+        scaled_image = upsample(image_t)
+        # Resize back to the target size required by ViT
+        resize_back = torch.nn.Upsample(
+            size=target_size, mode="bilinear", align_corners=True
+        )
+        return resize_back(scaled_image)
+
+    return inner
+
+
 standard_transforms = [
     pad(12, mode="constant", constant_value=0.5),
     jitter(8),
