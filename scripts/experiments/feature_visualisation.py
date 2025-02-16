@@ -5,6 +5,7 @@ from aurora import AuroraSmall, Batch, Metadata
 import matplotlib.pyplot as plt
 from tqdm import trange
 from hooks import hook_specific_layer
+import fft_image
 
 torch.manual_seed(0)
 
@@ -83,8 +84,12 @@ vars = [
     batch.atmos_vars["q"],
 ]
 
+params = []
+for var in vars:
+    params.append(fft_image.fft_image(var))
+
 # Define optimizer for the input data
-optimizer = torch.optim.Adam(vars, lr=learning_rate, betas=(0.5, 0.99), eps=1e-8)
+optimizer = torch.optim.Adam(params, lr=learning_rate, betas=(0.5, 0.99), eps=1e-8)
 lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, n_epochs, 0.0)
 
 pbar = trange(n_epochs, desc="loss: -")

@@ -5,6 +5,12 @@ TORCH_VERSION = torch.__version__
 DEFAULT_DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
+def pixel_image(shape, sd=None, device=DEFAULT_DEVICE):
+    sd = sd or 0.01
+    tensor = (torch.randn(*shape) * sd).to(device).requires_grad_(True)
+    return [tensor], lambda: tensor
+
+
 # From https://github.com/tensorflow/lucid/blob/master/lucid/optvis/param/spatial.py
 def rfft2d_freqs(h, w):
     """Computes 2D spectrum frequencies."""
@@ -24,7 +30,7 @@ def fft_image(shape, sd=None, decay_power=1, device=DEFAULT_DEVICE):
     init_val_size = (
         (batch, channels) + freqs.shape + (2,)
     )  # 2 for imaginary and real components
-    sd = sd or 0.01
+    sd = sd or 0.01  # sd == standard deviation
 
     spectrum_real_imag_t = (
         (torch.randn(*init_val_size) * sd).to(device).requires_grad_(True)
