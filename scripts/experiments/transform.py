@@ -191,6 +191,31 @@ def random_scale_vit(scales, target_size=(224, 224)):
     return inner
 
 
+def focus(size: int, std: float):
+    """
+    Randomly crops a square region of the given size from the center of the image,
+    with a random perturbation controlled by std.
+
+    Args:
+        size (int): The size of the square to crop.
+        std (float): Standard deviation for the random offset.
+
+    Returns:
+        A function that takes an image tensor of shape (B, C, H, W) and returns a cropped version.
+    """
+
+    def inner(img: torch.Tensor) -> torch.Tensor:
+        # Generate random perturbations in the range [-std, std] for x and y directions.
+        pert = (torch.rand(2, device=img.device) * 2 - 1) * std
+        w, h = img.shape[-2:]
+        # Compute starting indices for the crop ensuring they are within the image boundaries.
+        x = (pert[0] + w // 2 - size // 2).long().clamp(min=0, max=w - size)
+        y = (pert[1] + h // 2 - size // 2).long().clamp(min=0, max=h - size)
+        return img[:, :, x : x + size, y : y + size]
+
+    return inner
+
+
 standard_transforms = [
     pad(12, mode="constant", constant_value=0.5),
     jitter(8),

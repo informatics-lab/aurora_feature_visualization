@@ -10,27 +10,24 @@ import transform
 torch.manual_seed(0)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-model = models.vit_l_16(weights=models.ViT_L_16_Weights.IMAGENET1K_V1)
+model = models.swin_b(weights=models.Swin_B_Weights.IMAGENET1K_V1)
 
-hook = hook_specific_layer(model, "encoder.layers.encoder_layer_3.mlp.0")
+hook = hook_specific_layer(model, "features.1.0.mlp")
 
-params, image_f = image.image(224, fft=True, decorrelate=True, device=device)
+image_size = 224
+params, image_f = image.image(image_size, fft=True, decorrelate=True, device=device)
 
 transforms = [
     transform.jitter(8),
     transform.random_scale_vit(
-        [1 + (i - 5) / 50.0 for i in range(11)], target_size=(224, 224)
+        [1 + (i - 5) / 50.0 for i in range(11)], target_size=(image_size, image_size)
     ),
     transform.random_rotate(list(range(-10, 11)) + 5 * [0]),
     transform.jitter(4),
-    transform.normalize(),
 ]
 
-# transforms.append(transform.color_jitter_r(1, True))
-transform_f = transform.compose(transforms)
-
-channel_idx = 2
-n_epochs = 500
+neuron_idx = 0
+n_epochs = 400
 learning_rate = 5e-2
 batch_size = 1
 
@@ -39,14 +36,24 @@ optimizer = torch.optim.Adam(
     lr=learning_rate,
 )
 
+
+def neuron_loss(tensor, neuron_idx):
+    return -tensor[:, :, :, neuron_idx].mean()
+
+
+def attention_loss(tensor, head_idx, token_idx=None):
+    return -tensor[:, head_idx:token_idx].mean()
+
+
 model.eval()
 pbar = trange(n_epochs, desc="loss: -")
 for _ in pbar:
     optimizer.zero_grad()
 
+    transform_f = transform.compose(transforms)
     predictions = model(transform_f(image_f()))
 
-    loss = -hook.features[0, :, channel_idx].mean()
+    loss = neuron_loss(hook.features, neuron_idx)
     loss.backward()
     optimizer.step()
 
