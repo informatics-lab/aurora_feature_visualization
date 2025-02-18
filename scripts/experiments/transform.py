@@ -216,10 +216,24 @@ def focus(size: int, std: float):
     return inner
 
 
+def do_nothing():
+    def inner(image_tf):
+        return image_tf
+
+    return inner
+
+
 standard_transforms = [
     pad(12, mode="constant", constant_value=0.5),
     jitter(8),
     random_scale([1 + (i - 5) / 50.0 for i in range(11)]),
     random_rotate(list(range(-10, 11)) + 5 * [0]),
     jitter(4),
+]
+
+
+pii_transforms = [
+    focus(0, 0),  # This is will be updated in the inversion loop
+    jitter(8),
+    color_jitter_r(1, True),
 ]
