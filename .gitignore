@@ -6,3 +6,4 @@ checkpoints/*
 !checkpoints/.gitkeep
 images_data/*
 !images_data/.gitkeep
+.DS_Store
