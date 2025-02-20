@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 import torchvision.models as models
+from torchvision.transforms import transforms
 from tqdm import trange
 import matplotlib.pyplot as plt
 from hooks import hook_specific_layer
@@ -28,19 +29,6 @@ def attention_loss(tensor: torch.Tensor, head_idx: int) -> torch.Tensor:
     return -tensor[:, head_idx].mean()
 
 
-def build_plugin_transforms(focus_value: int, image_size: int) -> Callable:
-    """
-    Build the transforms for plugin inversion.
-    The focus value is updated every iteration.
-    """
-    transforms_list: List[Callable] = [
-        transform.focus(focus_value, 0),
-        transform.jitter(8),
-        transform.color_jitter_r(1, True),
-    ]
-    return transform.compose(transforms_list)
-
-
 def plugin_in_inversion(
     model: torch.nn.Module,
     optimizer: torch.optim.Optimizer,
@@ -55,15 +43,25 @@ def plugin_in_inversion(
     """
     model.eval()
     step = image_size // 8
+
+    transforms_list: List[Callable] = [
+        transform.focus(0, 0),
+        transform.zoom(image_size),
+        transform.jitter(8),
+        transform.color_jitter_r(1, True),
+    ]
+    transform_f = transform.compose(transforms_list)
+
     for i, size in enumerate(range(2 * step, image_size + 1, step)):
         cumulative_loss = 0.0
         pbar = trange(n_epochs, desc=f"PII Step {i + 1} Loss: -")
         for epoch in pbar:
             optimizer.zero_grad()
 
+            transforms_list[0] = transform.focus(size, 0)
+            transform_f = transform.compose(transforms_list)
             # Create a new transform with current focus value.
-            cur_transform = build_plugin_transforms(size, image_size)
-            _ = model(cur_transform(image_f()))
+            _ = model(transform_f(image_f()))
 
             loss = neuron_loss(hook.features, neuron_idx)
             cumulative_loss += loss.item()
@@ -71,7 +69,7 @@ def plugin_in_inversion(
             optimizer.step()
 
             pbar.set_description(
-                f"PII Step {i + 1} Loss: {cumulative_loss / (epoch + 1):.3f}"
+                f"PII Step {i + 1} Loss: {cumulative_loss / (epoch + 1):.4f}"
             )
 
 
@@ -110,7 +108,7 @@ def fourier_fv(
         loss.backward()
         optimizer.step()
 
-        pbar.set_description(f"FourierFV Loss: {cumulative_loss / (epoch + 1):.3f}")
+        pbar.set_description(f"FourierFV Loss: {cumulative_loss / (epoch + 1):.4f}")
 
 
 def plot_images(
@@ -158,8 +156,8 @@ def parse_arguments():
         description="Feature visualisation with activation maximisation"
     )
     parser.add_argument("--seed", type=int, default=0, help="Random seed")
-    parser.add_argument("--image_size", type=int, default=224, help="Input image size")
-    parser.add_argument("--fourier_epochs", type=int, default=500)
+    parser.add_argument("--image_size", type=int, default=256, help="Input image size")
+    parser.add_argument("--fourier_epochs", type=int, default=200)
     parser.add_argument("--pii_epochs", type=int, default=150)
     parser.add_argument("--pii_fourier_epochs", type=int, default=200)
     parser.add_argument("--layer_name", type=str, default="features.1.0")
@@ -188,64 +186,94 @@ def main():
 
     hook = hook_specific_layer(model, layer_name)
     image_size = args.image_size
-    # Initialize the image with FFT parameters.
-    params, image_f = image.image(image_size, fft=True, decorrelate=True, device=device)
-    neuron_idx = args.neuron_idx
 
-    optimizer = torch.optim.Adam(params, lr=args.learning_rate)
+    images = []
+    titles = []
 
-    # First stage: Fourier Feature Visualisation Optimisation.
-    logging.info("Starting Fourier Feature Visualisation optimisation...")
-    fourier_fv(
-        model, optimizer, image_f, image_size, args.fourier_epochs, hook, neuron_idx
-    )
-    first_stage_image = image_f().clone().detach().cpu().numpy()
-    first_stage_image = np.transpose(np.squeeze(first_stage_image), (1, 2, 0))
+    if args.fourier_epochs:
+        # Initialize the image with FFT parameters.
+        params, image_f = image.image(
+            image_size, fft=True, decorrelate=True, device=device
+        )
 
-    # Second stage: Plugin Inversion Inversion Optimisation.
-    # Reinitialize the image parameters.
-    params, image_f = image.image(image_size, fft=True, decorrelate=True, device=device)
-    optimizer = torch.optim.Adam(params, lr=args.learning_rate)
-    logging.info("Starting Plugin Inversion optimisation...")
-    plugin_in_inversion(
-        model, optimizer, image_f, image_size, args.pii_epochs, hook, neuron_idx
-    )
-    second_stage_image = image_f().clone().detach().cpu().numpy()
-    second_stage_image = np.transpose(np.squeeze(second_stage_image), (1, 2, 0))
+        optimizer = torch.optim.Adam(params, lr=args.learning_rate)
 
-    # Third stage: Continue with Fourier feature visualization.
-    logging.info("Starting Fourier Feature Visualisation (post PII) optimisation...")
+        # First stage: Fourier Feature Visualisation Optimisation.
+        logging.info("Starting Fourier Feature Visualisation optimisation...")
+        fourier_fv(
+            model,
+            optimizer,
+            image_f,
+            image_size,
+            args.fourier_epochs,
+            hook,
+            args.neuron_idx,
+        )
+        first_stage_image = image_f().clone().detach().cpu().numpy()
+        first_stage_image = np.transpose(np.squeeze(first_stage_image), (1, 2, 0))
+        images.append(first_stage_image)
+        titles.append("FourierFV")
 
-    fourier_fv(
-        model,
-        optimizer,
-        image_f,
-        image_size,
-        args.pii_fourier_epochs,
-        hook,
-        neuron_idx,
-    )
-    third_stage_image = image_f().clone().detach().cpu().numpy()
-    third_stage_image = np.transpose(np.squeeze(third_stage_image), (1, 2, 0))
+    if args.pii_epochs:
+        # Second stage: Plugin Inversion Inversion Optimisation.
+        # Reinitialize the image parameters.
+        params, image_f = image.image(
+            image_size, fft=True, decorrelate=True, device=device
+        )
+        optimizer = torch.optim.Adam(params, lr=args.learning_rate)
+        logging.info("Starting Plugin Inversion optimisation...")
+        plugin_in_inversion(
+            model,
+            optimizer,
+            image_f,
+            image_size,
+            args.pii_epochs,
+            hook,
+            args.neuron_idx,
+        )
+        second_stage_image = image_f().clone().detach().cpu().numpy()
+        second_stage_image = np.transpose(np.squeeze(second_stage_image), (1, 2, 0))
+        images.append(second_stage_image)
+        titles.append("PII")
+
+        if args.pii_fourier_epochs:
+            # Third stage: Continue with Fourier feature visualization.
+            logging.info(
+                "Starting Fourier Feature Visualisation (post PII) optimisation..."
+            )
+
+            fourier_fv(
+                model,
+                optimizer,
+                image_f,
+                image_size,
+                args.pii_fourier_epochs,
+                hook,
+                args.neuron_idx,
+            )
+            third_stage_image = image_f().clone().detach().cpu().numpy()
+            third_stage_image = np.transpose(np.squeeze(third_stage_image), (1, 2, 0))
+            images.append(third_stage_image)
+            titles.append("PII + FourierFV")
 
     hook.close()
 
     if args.save:
         save_images(
-            images=[first_stage_image, second_stage_image, third_stage_image],
-            titles=["fourierfv", "pii", "pii_fourierfv"],
+            images=images,
+            titles=[x.lower().replace(" ", "_") for x in titles],
             output_dir=args.output_dir,
             layer_name=layer_name,
-            neuron_idx=neuron_idx,
+            neuron_idx=args.neuron_idx,
         )
 
     # Plot the images.
     if args.no_plot:
         plot_images(
-            images=[first_stage_image, second_stage_image, third_stage_image],
-            titles=["FourierFV", "PII", "PII + FourierFV"],
+            images=images,
+            titles=titles,
             layer_name=layer_name,
-            neuron_idx=neuron_idx,
+            neuron_idx=args.neuron_idx,
         )
 
 

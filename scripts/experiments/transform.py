@@ -216,6 +216,34 @@ def focus(size: int, std: float):
     return inner
 
 
+def center(size: int):
+    def inner(img: torch.Tensor) -> torch.Tensor:
+        return img
+
+    return inner
+
+
+def zoom(out_size: int = 224):
+    """
+    Returns a function that zooms (resizes) an image tensor to the given output size.
+
+    Args:
+        out_size (int): The desired height and width of the output image.
+
+    Returns:
+        A function that takes an image tensor of shape (B, C, H, W) and returns it
+        zoomed (resized) to (B, C, out_size, out_size), using bilinear interpolation.
+    """
+
+    def inner(image_t: torch.Tensor) -> torch.Tensor:
+        # Use the functional interface to interpolate to (out_size, out_size)
+        return F.interpolate(
+            image_t, size=(out_size, out_size), mode="bilinear", align_corners=False
+        )
+
+    return inner
+
+
 def do_nothing():
     def inner(image_tf):
         return image_tf
