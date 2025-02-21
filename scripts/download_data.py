@@ -1,6 +1,7 @@
 from pathlib import Path
 import cdsapi
 import argparse
+from itertools import product
 
 
 def download_if_not_exists(c, file_path, request_type, request_params):
@@ -14,105 +15,121 @@ def download_if_not_exists(c, file_path, request_type, request_params):
         print(f"File already exists: {file_path.name}")
 
 
-def download_era5_data(year, month, day, time_points, base_download_path):
-    """Downloads ERA5 data for the specified date and time points."""
+def download_era5_data(years, months, days, time_points, base_download_path):
+    """Downloads ERA5 data for all specified years, months, and days."""
 
-    date_str = f"{year}-{month}-{day}"
-    date_download_path = base_download_path / date_str
-    date_download_path.mkdir(parents=True, exist_ok=True)
+    c = cdsapi.Client()  # Initialize client once
 
-    c = (
-        cdsapi.Client()
-    )  # Initialize client inside the function for better encapsulation
+    for year, month, day in product(years, months, days):
+        # Ensure zero-padding for month and day
+        date_str = f"{int(year):04d}-{int(month):02d}-{int(day):02d}"
+        date_download_path = base_download_path / date_str
+        date_download_path.mkdir(parents=True, exist_ok=True)
 
-    # Download static variables
-    static_file = date_download_path / "static.nc"
-    download_if_not_exists(
-        c,
-        static_file,
-        "reanalysis-era5-single-levels",
-        {
-            "product_type": "reanalysis",
-            "variable": ["geopotential", "land_sea_mask", "soil_type"],
-            "year": year,
-            "month": month,
-            "day": day,
-            "time": "00:00",
-            "format": "netcdf",
-        },
-    )
+        print(f"Processing data for {date_str}...")
 
-    # Download surface-level variables
-    surface_file = date_download_path / f"{date_str}-surface-level.nc"
-    download_if_not_exists(
-        c,
-        surface_file,
-        "reanalysis-era5-single-levels",
-        {
-            "product_type": "reanalysis",
-            "variable": [
-                "2m_temperature",
-                "10m_u_component_of_wind",
-                "10m_v_component_of_wind",
-                "mean_sea_level_pressure",
-            ],
-            "year": year,
-            "month": month,
-            "day": day,
-            "time": time_points,
-            "format": "netcdf",
-        },
-    )
+        # Download static variables
+        static_file = date_download_path / f"{date_str}_static.nc"
+        download_if_not_exists(
+            c,
+            static_file,
+            "reanalysis-era5-single-levels",
+            {
+                "product_type": "reanalysis",
+                "variable": ["geopotential", "land_sea_mask", "soil_type"],
+                "year": year,
+                "month": month,
+                "day": day,
+                "time": "00:00",
+                "format": "netcdf",
+            },
+        )
 
-    # Download atmospheric variables
-    atmospheric_file = date_download_path / f"{date_str}-atmospheric.nc"
-    download_if_not_exists(
-        c,
-        atmospheric_file,
-        "reanalysis-era5-pressure-levels",
-        {
-            "product_type": "reanalysis",
-            "variable": [
-                "temperature",
-                "u_component_of_wind",
-                "v_component_of_wind",
-                "specific_humidity",
-                "geopotential",
-            ],
-            "pressure_level": [
-                "50",
-                "100",
-                "150",
-                "200",
-                "250",
-                "300",
-                "400",
-                "500",
-                "600",
-                "700",
-                "850",
-                "925",
-                "1000",
-            ],
-            "year": year,
-            "month": month,
-            "day": day,
-            "time": time_points,
-            "format": "netcdf",
-        },
-    )
+        # Download surface-level variables
+        surface_file = date_download_path / f"{date_str}_surface.nc"
+        download_if_not_exists(
+            c,
+            surface_file,
+            "reanalysis-era5-single-levels",
+            {
+                "product_type": "reanalysis",
+                "variable": [
+                    "2m_temperature",
+                    "10m_u_component_of_wind",
+                    "10m_v_component_of_wind",
+                    "mean_sea_level_pressure",
+                ],
+                "year": year,
+                "month": month,
+                "day": day,
+                "time": time_points,
+                "format": "netcdf",
+            },
+        )
+
+        # Download atmospheric variables
+        atmospheric_file = date_download_path / f"{date_str}_atmospheric.nc"
+        download_if_not_exists(
+            c,
+            atmospheric_file,
+            "reanalysis-era5-pressure-levels",
+            {
+                "product_type": "reanalysis",
+                "variable": [
+                    "temperature",
+                    "u_component_of_wind",
+                    "v_component_of_wind",
+                    "specific_humidity",
+                    "geopotential",
+                ],
+                "pressure_level": [
+                    "50",
+                    "100",
+                    "150",
+                    "200",
+                    "250",
+                    "300",
+                    "400",
+                    "500",
+                    "600",
+                    "700",
+                    "850",
+                    "925",
+                    "1000",
+                ],
+                "year": year,
+                "month": month,
+                "day": day,
+                "time": time_points,
+                "format": "netcdf",
+            },
+        )
 
     print("All requested data has been processed!")
 
 
 def main():
     parser = argparse.ArgumentParser(description="Download ERA5 data.")
-    parser.add_argument("--years", help="Year of data to download (YYYY)")
     parser.add_argument(
-        "--months", type=str, nargs="+", help="Month of data to download (MM)"
+        "--years",
+        type=str,
+        nargs="+",
+        required=True,
+        help="Years of data to download (YYYY)",
     )
     parser.add_argument(
-        "--days", type=str, nargs="+", help="Day of data to download (DD)"
+        "--months",
+        type=str,
+        nargs="+",
+        required=True,
+        help="Months of data to download (MM)",
+    )
+    parser.add_argument(
+        "--days",
+        type=str,
+        nargs="+",
+        required=True,
+        help="Days of data to download (DD)",
     )
     parser.add_argument(
         "--times",
@@ -130,6 +147,7 @@ def main():
     args = parser.parse_args()
 
     base_download_path = Path(args.output_dir)
+
     download_era5_data(
         args.years, args.months, args.days, args.times, base_download_path
     )
