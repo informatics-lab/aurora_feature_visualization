@@ -7,4 +7,4 @@ checkpoints/*
 images_data/*
 !images_data/.gitkeep
 .DS_Store
-scripts/experiments/__pycache__
+scripts/experiments/__pycache__/
