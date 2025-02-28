@@ -19,15 +19,15 @@ surface_vars = [
 ]
 static_vars = [
     "z",
-    "lsm",
     "slt",
+    "lsm",
 ]
 atmospheric_vars = [
     "t",
     "u",
     "v",
-    "z",
     "q",
+    "z",
 ]
 
 cov_mtx_surface = 0.0
