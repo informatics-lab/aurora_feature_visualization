@@ -9,3 +9,7 @@ dependencies:
   - cdsapi
   - netcdf4 
   - matplotlib
+  - zarr
+  - gcsfs
+  - dask
+  - kornia
