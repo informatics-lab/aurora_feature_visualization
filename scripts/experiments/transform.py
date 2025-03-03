@@ -7,10 +7,14 @@ import numpy as np
 import kornia
 from kornia.geometry.transform import translate
 
-try:
-    from kornia import warp_affine, get_rotation_matrix2d
-except ImportError:
-    from kornia.geometry.transform import warp_affine, get_rotation_matrix2d
+# try:
+#     from kornia import warp_affine, get_rotation_matrix2d
+# except ImportError:
+from kornia.geometry.transform import (
+    warp_affine,
+    get_rotation_matrix2d,
+    warp_affine3d,
+)
 
 
 KORNIA_VERSION = kornia.__version__
@@ -23,6 +27,32 @@ def jitter(d):
         dx = np.random.choice(d)
         dy = np.random.choice(d)
         return translate(image_t, torch.tensor([[dx, dy]]).float().to(image_t.device))
+
+    return inner
+
+
+def jitter_3d(displacement_range, dsize):
+    assert displacement_range > 1, (
+        "Jitter parameter displacement_range must be more than 1, currently {}".format(
+            displacement_range
+        )
+    )
+
+    def inner(image_t):
+        device = image_t.device
+        batch_size = image_t.shape[0]
+
+        dx = (torch.rand(batch_size, 1, device=device) * 2 - 1) * displacement_range
+        dy = (torch.rand(batch_size, 1, device=device) * 2 - 1) * displacement_range
+        dz = (torch.rand(batch_size, 1, device=device) * 2 - 1) * displacement_range
+
+        M = torch.eye(3, 4, device=device).unsqueeze(0).repeat(batch_size, 1, 1)
+        M[:, 0, 3] = dx.squeeze(1)
+        M[:, 1, 3] = dy.squeeze(1)
+        M[:, 2, 3] = dz.squeeze(1)
+
+        jittered_image = warp_affine3d(image_t, M, dsize)
+        return jittered_image, dx, dy, dz
 
     return inner
 
