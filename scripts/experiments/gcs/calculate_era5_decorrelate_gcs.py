@@ -4,7 +4,7 @@ from tqdm.contrib.itertools import product
 import numpy as np
 from datetime import datetime
 
-years = [2019]
+years = [2018]
 months = [
     1,
     2,
@@ -12,6 +12,12 @@ months = [
     4,
     5,
     6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
 ]
 days = [1, 15]
 
