@@ -33,10 +33,12 @@ def rfftn_freqs(shape):
 
 
 def fft_volume(shape, sd=None, decay_power=1, device=DEFAULT_DEVICE):
-    batch, channels, *spatial_dims = shape
+    batch, time, channels, *spatial_dims = shape
 
     freqs = rfftn_freqs(spatial_dims)
-    init_val_size = (batch, channels) + freqs.shape + (2,)  # 2 for real and imaginary
+    init_val_size = (
+        (batch, time, channels) + freqs.shape + (2,)
+    )  # 2 for real and imaginary
 
     sd = sd or 0.01
 
@@ -54,7 +56,7 @@ def fft_volume(shape, sd=None, decay_power=1, device=DEFAULT_DEVICE):
             scaled_spectrum_t = torch.view_as_complex(scaled_spectrum_t)
         volume = torch.fft.irfftn(scaled_spectrum_t, s=spatial_dims, norm="ortho")
         volume = volume[
-            :batch, :channels, *([slice(None, dim) for dim in spatial_dims])
+            :batch, :time, :channels, *([slice(None, dim) for dim in spatial_dims])
         ]
         magic = 4.0
         volume = volume / magic

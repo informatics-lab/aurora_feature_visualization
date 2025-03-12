@@ -35,8 +35,9 @@ lvl_type = "surf"  # surf / atmos / static
 def build_era_image():
     surf_params, surf_image_f = image.image(lat, lon, time, lvl_type="surf")
     static_params, static_image_f = image.image(lat, lon, time, lvl_type="static")
-    surf_params = [surf_params[0].squeeze(axis=3)]  # Remove lvl
-    static_params = [static_params[0].squeeze(axis=3)]  # # Remove lvl
+    # This doesn't work becuase it stops it from being a leaf node, i think to get it to work I need it to be done within the image_f function
+    # surf_params = [surf_params[0].squeeze(axis=3)]  # Remove lvl
+    # static_params = [static_params[0].squeeze(axis=3)]  # # Remove lvl
     atmos_params, atmos_image_f = image.image(lat, lon, time, lvl_type="atmos")
     params = surf_params + static_params + atmos_params
 
@@ -49,10 +50,10 @@ params, image_fs = build_era_image()
 def build_batch(image_fs):
     surf_vars = {
         k: image_fs[0]()[:, :, i].squeeze(axis=2)
-        for i, k in enumerate(("t2m", "10u", "10v", "msl"))
+        for i, k in enumerate(("2t", "10u", "10v", "msl"))
     }
     static_vars = {
-        k: image_fs[1]()[:, :, i].squeeze(axis=2)
+        k: image_fs[1]()[:, 0, i].squeeze(axis=[0, 1, 2])
         for i, k in enumerate(("lsm", "z", "slt"))
     }
     atmos_vars = {
@@ -68,7 +69,7 @@ def build_batch(image_fs):
         metadata=Metadata(
             lat=torch.linspace(90, -90, lat, device=device),
             lon=torch.linspace(0, 360, lon + 1, device=device)[:-1],
-            time=(datetime(1, 1, 1, 1, 1),),
+            time=(datetime(2020, 6, 1, 12, 0),),
             atmos_levels=(
                 50,
                 100,
@@ -91,11 +92,6 @@ def build_batch(image_fs):
 
 
 batch = build_batch(image_fs)
-
-
-print(batch)
-input()
-
 
 # # Move all batch variables to the chosen device.
 # def move_batch_to_device(batch_obj, device):
@@ -134,8 +130,7 @@ for _ in pbar:
     predictions = model(batch)
 
     # Calculate loss from one of the hooked layers.
-    print(hook.features.shape)
-    input()
+    # print(hook.features.shape)
 
     loss = -hook.features[:, :, neuron_idx].mean()
 

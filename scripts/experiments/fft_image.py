@@ -44,7 +44,6 @@ def fft_image(shape, sd=None, decay_power=1, device=DEFAULT_DEVICE):
         if type(scaled_spectrum_t) is not torch.complex64:
             scaled_spectrum_t = torch.view_as_complex(scaled_spectrum_t)
         image = torch.fft.irfftn(scaled_spectrum_t, s=(h, w), norm="ortho")
-        image = image[:batch, :channels, :h, :w]
         magic = 4.0
         image = image / magic
         return image
