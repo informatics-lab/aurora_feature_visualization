@@ -44,47 +44,54 @@ def build_era_image():
 
 
 params, image_fs = build_era_image()
-print(params[0].shape)
-print(params[2].shape)
-print(image_fs[0]().shape)
 
 
-surf_images = {
-    k: image_fs[0]()[..., i] for i, k in enumerate(("t2m", "10u", "10v", "msl"))
-}
+def build_batch(image_fs):
+    surf_vars = {
+        k: image_fs[0]()[:, :, i].squeeze(axis=2)
+        for i, k in enumerate(("t2m", "10u", "10v", "msl"))
+    }
+    static_vars = {
+        k: image_fs[1]()[:, :, i].squeeze(axis=2)
+        for i, k in enumerate(("lsm", "z", "slt"))
+    }
+    atmos_vars = {
+        k: image_fs[2]()[:, :, i].squeeze(axis=2)
+        for i, k in enumerate(("z", "u", "v", "t", "q"))
+    }
 
-print(surf_images["t2m"].shape)
-input()
+    # Create the batch data on the CPU first.
+    batch = Batch(
+        surf_vars=surf_vars,
+        static_vars=static_vars,
+        atmos_vars=atmos_vars,
+        metadata=Metadata(
+            lat=torch.linspace(90, -90, lat, device=device),
+            lon=torch.linspace(0, 360, lon + 1, device=device)[:-1],
+            time=(datetime(1, 1, 1, 1, 1),),
+            atmos_levels=(
+                50,
+                100,
+                150,
+                200,
+                250,
+                300,
+                400,
+                500,
+                600,
+                700,
+                850,
+                925,
+                1000,
+            ),
+        ),
+    )
 
-# surf_images = {
-#     k: image.image(shape=[1, 2, lat, lon], decorrelate=True)
-#     for k in ("2t", "10u", "10v", "msl")
-# }
-# static_images = {
-#     k: image.image(shape=[lat, lon], decorrelate=True) for k in ("lsm", "z", "slt")
-# }
-#
-# atmos_images = {
-#     k: image.image(shape=[1, 2, 4, lat, lon], decorrelate=True)
-#     for k in ("z", "u", "v", "t", "q")
-# }
+    return batch
 
-surf_vars = {k: surf_images[k][1]() for k in ("2t", "10u", "10v", "msl")}
-static_vars = {k: static_images[k][1]() for k in ("lsm", "z", "slt")}
-atmos_vars = {k: atmos_images[k][1]() for k in ("z", "u", "v", "t", "q")}
 
-# Create the batch data on the CPU first.
-batch = Batch(
-    surf_vars=surf_vars,
-    static_vars=static_vars,
-    atmos_vars=atmos_vars,
-    metadata=Metadata(
-        lat=torch.linspace(90, -90, lat, device=device),
-        lon=torch.linspace(0, 360, lon + 1, device=device)[:-1],
-        time=(datetime(2020, 6, 1, 12, 0),),
-        atmos_levels=(100, 250, 500, 850),
-    ),
-)
+batch = build_batch(image_fs)
+
 
 print(batch)
 input()
@@ -110,13 +117,6 @@ input()
 neuron_idx = 1
 n_epochs = 100
 learning_rate = 1e-8
-vars = [
-    batch.surf_vars["2t"],
-]
-
-
-# for var in vars:
-#     params.append(fft_image.fft_image(var))
 
 
 def neuron_loss(tensor: torch.Tensor, neuron_idx: int) -> torch.Tensor:
@@ -130,6 +130,7 @@ optimizer = torch.optim.Adam(params, lr=learning_rate, betas=(0.5, 0.99), eps=1e
 pbar = trange(n_epochs, desc="loss: -")
 for _ in pbar:
     optimizer.zero_grad()
+    batch = build_batch(image_fs)
     predictions = model(batch)
 
     # Calculate loss from one of the hooked layers.
