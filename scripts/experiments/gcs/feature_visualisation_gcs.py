@@ -32,19 +32,25 @@ time = 2
 lvl_type = "surf"  # surf / atmos / static
 
 
-def build_era_image():
-    surf_params, surf_image_f = image.image(lat, lon, time, lvl_type="surf")
-    static_params, static_image_f = image.image(lat, lon, time, lvl_type="static")
+def build_era_image(device):
+    surf_params, surf_image_f = image.image(
+        lat, lon, time, lvl_type="surf", device=device
+    )
+    static_params, static_image_f = image.image(
+        lat, lon, time, lvl_type="static", device=device
+    )
     # This doesn't work becuase it stops it from being a leaf node, i think to get it to work I need it to be done within the image_f function
     # surf_params = [surf_params[0].squeeze(axis=3)]  # Remove lvl
     # static_params = [static_params[0].squeeze(axis=3)]  # # Remove lvl
-    atmos_params, atmos_image_f = image.image(lat, lon, time, lvl_type="atmos")
+    atmos_params, atmos_image_f = image.image(
+        lat, lon, time, lvl_type="atmos", device=device
+    )
     params = surf_params + static_params + atmos_params
 
     return params, [surf_image_f, static_image_f, atmos_image_f]
 
 
-params, image_fs = build_era_image()
+params, image_fs = build_era_image(device)
 
 
 def build_batch(image_fs):
@@ -111,7 +117,7 @@ batch = build_batch(image_fs)
 # move_batch_to_device(batch, device)
 
 neuron_idx = 1
-n_epochs = 100
+n_epochs = 3
 learning_rate = 1e-8
 
 
