@@ -21,7 +21,7 @@ model.load_checkpoint_local(model_path)
 # Move the model to the chosen device and set it to evaluation mode.
 model.to(device).eval()
 
-hook = hook_specific_layer(model, "backbone.encoder_layers.0.blocks.1.mlp.act")
+hook = hook_specific_layer(model, "backbone.encoder_layers.0.blocks.0.mlp")
 
 lat = 721
 lon = 1440
@@ -116,9 +116,10 @@ batch = build_batch(image_fs)
 #
 # move_batch_to_device(batch, device)
 
-neuron_idx = 1
-n_epochs = 3
+neuron_idx = 0
+n_epochs = 1
 learning_rate = 1e-8
+learning_rate = 0
 
 
 def neuron_loss(tensor: torch.Tensor, neuron_idx: int) -> torch.Tensor:
@@ -147,6 +148,8 @@ for _ in pbar:
     # lr_scheduler.step()
 
     pbar.set_description(f"loss: {loss:.2f}")
+
+batch = build_batch(image_fs)
 
 rollout_steps = 2
 surface_vars = [
