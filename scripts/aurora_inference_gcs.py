@@ -90,6 +90,10 @@ def main(
         ),
     )
 
+    print(batch.surf_vars["2t"].shape)
+    print(batch.atmos_vars["t"].shape)
+    input()
+
     # Load model
     model_path = os.path.join(checkpoint_dir, model_name)
     model = AuroraSmall().to(device)

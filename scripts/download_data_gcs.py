@@ -80,15 +80,6 @@ def process_and_save_data(
         np.float32
     )
 
-    selected_data = selected_data.chunk(
-        {"time": 5}
-    )  # Having trouble not manually setting time chunk
-
-    encoding = {
-        var: {"compressor": zarr.Blosc(cname="lz4", clevel=3)}
-        for var in selected_data.data_vars
-    }
-
     if mode == "a" and os.path.exists(output_path):
         existing_ds = xr.open_zarr(output_path, consolidated=True)
         new_times = selected_data.time.values
@@ -97,9 +88,7 @@ def process_and_save_data(
         if len(unique_new_times) > 0:
             selected_data = selected_data.sel(time=unique_new_times)
             if len(selected_data.time) > 0:
-                selected_data.to_zarr(
-                    output_path, mode="a", append_dim="time", safe_chunks=False
-                )
+                selected_data.to_zarr(output_path, mode="a", append_dim="time")
                 consolidate_metadata(output_path)
             else:
                 print("All times already exist. No new data was added.")
@@ -110,7 +99,7 @@ def process_and_save_data(
         selected_data.to_zarr(
             output_path,
             mode=mode,
-            encoding=encoding,
+            # encoding=encoding,
         )
         consolidate_metadata(output_path)
     save_end_time = time()

@@ -16,14 +16,13 @@ conda env create -f requirements.yml
 curl https://huggingface.co/microsoft/aurora/resolve/main/aurora-0.25-small-pretrained.ckpt -o aurora-0.25-small-pretrained.ckpt
 ```
 
-### ERA 5 Data 
+## Run Scripts
+Run from root of repo
+
 ```bash
 conda activate aurora_fv
 python scripts/download_data.py
 ```
-
-## Run Scripts
-Run from root of repo
 
 ```bash
 conda activate aurora_fv

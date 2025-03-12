@@ -34,6 +34,7 @@ def rfftn_freqs(shape):
 
 def fft_volume(shape, sd=None, decay_power=1, device=DEFAULT_DEVICE):
     batch, channels, *spatial_dims = shape
+
     freqs = rfftn_freqs(spatial_dims)
     init_val_size = (batch, channels) + freqs.shape + (2,)  # 2 for real and imaginary
 

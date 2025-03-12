@@ -23,32 +23,51 @@ model.to(device).eval()
 
 hook = hook_specific_layer(model, "backbone.encoder_layers.0.blocks.1.mlp.act")
 
+lat = 721
+lon = 1440
 lat = 180
 lon = 360
+time = 2
+
+lvl_type = "surf"  # surf / atmos / static
 
 
 def build_era_image():
-    param, image_f = image.image(w=lon, h=lat, batch=1, channels=5, decorrelate=True)
+    surf_params, surf_image_f = image.image(lat, lon, time, lvl_type="surf")
+    static_params, static_image_f = image.image(lat, lon, time, lvl_type="static")
+    surf_params = [surf_params[0].squeeze(axis=3)]  # Remove lvl
+    static_params = [static_params[0].squeeze(axis=3)]  # # Remove lvl
+    atmos_params, atmos_image_f = image.image(lat, lon, time, lvl_type="atmos")
+    params = surf_params + static_params + atmos_params
+
+    return params, [surf_image_f, static_image_f, atmos_image_f]
 
 
-# param, image_f = image.image(shape=[1, 2, lat, lon], decorrelate=True)
-param, image_f = image.image(w=lon, h=lat, batch=1, channels=5, decorrelate=True)
-print(image_f().shape)
-input()
-params = [param]
+params, image_fs = build_era_image()
+print(params[0].shape)
+print(params[2].shape)
+print(image_fs[0]().shape)
+
 
 surf_images = {
-    k: image.image(shape=[1, 2, lat, lon], decorrelate=True)
-    for k in ("2t", "10u", "10v", "msl")
-}
-static_images = {
-    k: image.image(shape=[lat, lon], decorrelate=True) for k in ("lsm", "z", "slt")
+    k: image_fs[0]()[..., i] for i, k in enumerate(("t2m", "10u", "10v", "msl"))
 }
 
-atmos_images = {
-    k: image.image(shape=[1, 2, 4, lat, lon], decorrelate=True)
-    for k in ("z", "u", "v", "t", "q")
-}
+print(surf_images["t2m"].shape)
+input()
+
+# surf_images = {
+#     k: image.image(shape=[1, 2, lat, lon], decorrelate=True)
+#     for k in ("2t", "10u", "10v", "msl")
+# }
+# static_images = {
+#     k: image.image(shape=[lat, lon], decorrelate=True) for k in ("lsm", "z", "slt")
+# }
+#
+# atmos_images = {
+#     k: image.image(shape=[1, 2, 4, lat, lon], decorrelate=True)
+#     for k in ("z", "u", "v", "t", "q")
+# }
 
 surf_vars = {k: surf_images[k][1]() for k in ("2t", "10u", "10v", "msl")}
 static_vars = {k: static_images[k][1]() for k in ("lsm", "z", "slt")}
