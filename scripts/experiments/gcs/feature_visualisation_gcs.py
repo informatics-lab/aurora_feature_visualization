@@ -16,15 +16,14 @@ model_name = "aurora-0.25-small-pretrained.ckpt"
 model_path = os.path.join(checkpoints_dir, model_name)
 
 model = AuroraSmall()
-model.load_checkpoint_local(model_path)
+# model.load_checkpoint_local(model_path, strict=True)
+model.load_checkpoint("microsoft/aurora", "aurora-0.25-small-pretrained.ckpt")
 
 # Move the model to the chosen device and set it to evaluation mode.
 model.to(device).eval()
 
 hook = hook_specific_layer(model, "backbone.encoder_layers.0.blocks.0.mlp")
 
-lat = 721
-lon = 1440
 lat = 180
 lon = 360
 time = 2
@@ -117,9 +116,8 @@ batch = build_batch(image_fs)
 # move_batch_to_device(batch, device)
 
 neuron_idx = 0
-n_epochs = 1
-learning_rate = 1e-8
-learning_rate = 0
+n_epochs = 300
+learning_rate = 5e-2
 
 
 def neuron_loss(tensor: torch.Tensor, neuron_idx: int) -> torch.Tensor:
