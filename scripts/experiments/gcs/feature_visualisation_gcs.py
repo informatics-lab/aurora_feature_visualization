@@ -7,10 +7,31 @@ import matplotlib.pyplot as plt
 from tqdm import trange
 from hooks import hook_specific_layer
 import image
+from kornia.geometry.transform import warp_affine3d, translate
+import numpy as np
 
 torch.manual_seed(0)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+def jitter_3d(displacement_range, dsize):
+    def inner(image_t):
+        device = image_t.device
+        batch_size = image_t.shape[0]
+
+        dx = (torch.rand(batch_size, 1, device=device) * 2 - 1) * displacement_range
+        dy = (torch.rand(batch_size, 1, device=device) * 2 - 1) * displacement_range
+        dz = torch.zeros(batch_size, 1, device=device)  # No movement along this axis
+
+        M = torch.eye(3, 4, device=device).unsqueeze(0).repeat(batch_size, 1, 1)
+        M[:, 0, 3] = dx.squeeze(1)
+        M[:, 1, 3] = dy.squeeze(1)
+        M[:, 2, 3] = dz.squeeze(1)
+
+        jittered_image = warp_affine3d(image_t.unsqueeze(1), M, dsize).squeeze(1)
+        return jittered_image
+
+    return inner
 
 def build_era_image(lat, lon, time, lvl_type, device):
     surf_params, surf_image_f = image.image(lat, lon, time, lvl_type="surf", device=device)
@@ -19,9 +40,9 @@ def build_era_image(lat, lon, time, lvl_type, device):
     params = surf_params + static_params + atmos_params
     return params, [surf_image_f, static_image_f, atmos_image_f]
 
-def build_batch(image_fs, lat, lon, device):
+def build_batch(image_fs, lat, lon, device, transform):
     surf_vars = {
-        k: image_fs[0]()[:, :, i].squeeze(axis=2)
+        k: transform(image_fs[0]()[:, :, i].squeeze(axis=2))
         for i, k in enumerate(("2t", "10u", "10v", "msl"))
     }
     static_vars = {
@@ -56,12 +77,15 @@ def main(args):
     model.to(device).eval()
 
     # Hook into a specific layer
-    layer_name = "backbone.encoder_layers.1.blocks.0.mlp"
+    layer_name = "backbone.encoder_layers.0.blocks.0.mlp"
     hook = hook_specific_layer(model, layer_name)
+
+    transform = jitter_3d(5, (2, args.lat, args.lon))
 
     # Build ERA image and batch using provided args.
     params, image_fs = build_era_image(args.lat, args.lon, args.time, args.lvl_type, device)
-    batch = build_batch(image_fs, args.lat, args.lon, device)
+    batch = build_batch(image_fs, args.lat, args.lon, device, transform)
+
 
     # Define optimizer for the input data
     optimizer = torch.optim.Adam(params, lr=args.learning_rate, betas=(0.5, 0.99), eps=1e-8)
@@ -69,7 +93,7 @@ def main(args):
     pbar = trange(args.n_epochs, desc="loss: -")
     for _ in pbar:
         optimizer.zero_grad()
-        batch = build_batch(image_fs, args.lat, args.lon, device)
+        batch = build_batch(image_fs, args.lat, args.lon, device, transform)
         predictions = model(batch)
 
         # Compute loss using the neuron index from arguments.
@@ -80,7 +104,7 @@ def main(args):
         pbar.set_description(f"loss: {loss:.2f}")
 
     # Generate rollout visualization
-    batch = build_batch(image_fs, args.lat, args.lon, device)
+    batch = build_batch(image_fs, args.lat, args.lon, device, transform)
     rollout_steps = 2
     surface_vars = [
         batch.surf_vars["2t"],
