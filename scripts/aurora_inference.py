@@ -30,12 +30,14 @@ def main(
     date_download_path.mkdir(parents=True, exist_ok=True)
 
     # Load datasets
-    static_vars_ds = xr.open_dataset(date_download_path / "static.nc", engine="netcdf4")
+    static_vars_ds = xr.open_dataset(
+        date_download_path / f"{date_str}_static.nc", engine="netcdf4"
+    )
     surf_vars_ds = xr.open_dataset(
-        date_download_path / f"{date_str}-surface-level.nc", engine="netcdf4"
+        date_download_path / f"{date_str}_surface.nc", engine="netcdf4"
     )
     atmos_vars_ds = xr.open_dataset(
-        date_download_path / f"{date_str}-atmospheric.nc", engine="netcdf4"
+        date_download_path / f"{date_str}_atmospheric.nc", engine="netcdf4"
     )
 
     # Select this time index in the downloaded data.
@@ -220,11 +222,12 @@ if __name__ == "__main__":
         default=default_args["model_name"],
         help=f"Model checkpoint file name (default: {default_args['model_name']})",
     )
+
     parser.add_argument(
-        "--plot_output",
-        type=bool,
-        default=default_args["plot_output"],
-        help=f"Whether to plot the model output (default: {default_args['plot_output']})",
+        "--no-plot_output",
+        dest="plot_output",
+        action="store_false",
+        help="Whether to plot the model output",
     )
     parser.add_argument(
         "--save_output",
