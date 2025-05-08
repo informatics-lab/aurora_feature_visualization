@@ -11,9 +11,18 @@ checkpoints_dir = "checkpoints"
 model_name = "aurora-0.25-small-pretrained.ckpt"
 model_path = os.path.join(checkpoints_dir, model_name)
 
-model = AuroraSmall()
+# model = AuroraSmall()
+model = AuroraSmall(
+    use_lora=False,  # Model was not fine-tuned.
+    autocast=True,  # Use AMP.
+)
 
-model.load_checkpoint_local(model_path)
+# model.load_checkpoint_local(model_path)
+
+model.load_checkpoint("microsoft/aurora", "aurora-0.25-small-pretrained.ckpt")
+model.configure_activation_checkpointing()
+model.to(device)
+model.eval()
 
 lat = 180
 lon = 360
@@ -31,7 +40,9 @@ batch = Batch(
 
 print(layer_names(model))
 
-hook = hook_specific_layer(model, "backbone.encoder_layers.0.blocks.0.mlp.act")
+hook = hook_specific_layer(
+    model, "backbone.encoder_layers.0._checkpoint_wrapped_module.blocks.0.mlp.act"
+)
 
 prediction = model(batch)
 

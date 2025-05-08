@@ -14,9 +14,11 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 checkpoints_dir = "checkpoints"
 model_name = "aurora-0.25-small-pretrained.ckpt"
 model_path = os.path.join(checkpoints_dir, model_name)
+model_path = ""
 
 model = AuroraSmall()
-model.load_checkpoint_local(model_path)
+model.load_checkpoint("microsoft/aurora", "aurora-0.25-small-pretrained.ckpt")
+# model.load_checkpoint_local(model_path)
 
 # Move the model to the chosen device and set it to evaluation mode.
 model.to(device).eval()
@@ -31,8 +33,8 @@ def build_era_image():
     param, image_f = image.image(w=lon, h=lat, batch=1, channels=5, decorrelate=True)
 
 
-# param, image_f = image.image(shape=[1, 2, lat, lon], decorrelate=True)
-param, image_f = image.image(w=lon, h=lat, batch=1, channels=5, decorrelate=True)
+param, image_f = image.image(shape=[1, 2, lat, lon], decorrelate=True)
+# param, image_f = image.image(w=lon, h=lat, batch=1, channels=5, decorrelate=True)
 print(image_f().shape)
 input()
 params = [param]

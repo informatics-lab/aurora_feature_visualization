@@ -4,12 +4,14 @@ channels:
   - conda-forge
 dependencies:
   - python
-  - microsoft-aurora
-  - xarray
-  - cdsapi
-  - netcdf4 
-  - matplotlib
-  - zarr
-  - gcsfs
-  - dask
-  - kornia
+  - pip
+  - pip:
+    - microsoft-aurora
+    - xarray
+    - cdsapi
+    - netcdf4 
+    - matplotlib
+    - zarr
+    - gcsfs
+    - dask
+    - kornia
