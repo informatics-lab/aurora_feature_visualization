@@ -108,16 +108,14 @@ def build_era_image(lat, lon, time, lvl_type, device):
     atmos_params, atmos_image_f = image.image(
         lat, lon, time, lvl_type="atmos", device=device
     )
-    print(surf_image_f().shape)
-    print(atmos_image_f().shape)
     params = surf_params + static_params + atmos_params
     return params, [surf_image_f, static_image_f, atmos_image_f]
 
 
 def build_batch(image_fs, lat, lon, device, transform):
     surf_vars = {
-        # k: transform(image_fs[0]()[:, :, i].squeeze(axis=3))
-        k: transform(image_fs[0]()[:, :, i])
+        k: transform(image_fs[0]()[:, :, i]).squeeze(axis=2)
+        # k: transform(image_fs[0]()[:, :, i])
         for i, k in enumerate(("2t", "10u", "10v", "msl"))
     }
     static_vars = {
@@ -173,7 +171,7 @@ def main(args):
     model.eval()
 
     # Hook into a specific layer
-    layer_name = "backbone.encoder_layers.1._checkpoint_wrapped_module.blocks.0.mlp"
+    layer_name = "backbone.encoder_layers.0._checkpoint_wrapped_module.blocks.0.mlp"
     hook = hook_specific_layer(model, layer_name)
 
     transform = jitter_3d(5)
@@ -238,7 +236,7 @@ def main(args):
             ax = axes[i, j]
 
             # Extract a 2D slice by dropping the channel dimension
-            img = var_data[0, j, 0].detach().cpu().numpy()
+            img = var_data[0, j].detach().cpu().numpy()
             # Alternatively: img = var_data[0, j].squeeze(0).detach().cpu().numpy()
 
             im = ax.imshow(img, cmap="coolwarm", origin="lower")
