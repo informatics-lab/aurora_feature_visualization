@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 from tqdm import trange
 from hooks import hook_specific_layer
 import image
-from kornia.geometry.transform import warp_affine3d, translate
+from kornia.geometry.transform import warp_affine3d, translate, warp_affine
 import numpy as np
 
 torch.manual_seed(1)
@@ -15,22 +15,43 @@ torch.manual_seed(1)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-def jitter_3d(displacement_range, dsize):
-    def inner(image_t):
-        device = image_t.device
-        batch_size = image_t.shape[0]
+def jitter_3d(max_shift):
+    mode = "bilinear"
+    padding_mode = "border"
+    align_corners = True
 
-        dx = (torch.rand(batch_size, 1, device=device) * 2 - 1) * displacement_range
-        dy = (torch.rand(batch_size, 1, device=device) * 2 - 1) * displacement_range
-        dz = torch.zeros(batch_size, 1, device=device)  # No movement along this axis
+    def inner(
+        data: torch.Tensor,
+    ) -> torch.Tensor:
+        assert data.ndim == 5 and data.shape[0] == 1 and data.shape[2] == 1, (
+            "Expected shape (1, T, 1, H, W)"
+        )
+        B, T, C, H, W = data.shape
+        imgs = data.view(B * T, C, H, W)
 
-        M = torch.eye(3, 4, device=device).unsqueeze(0).repeat(batch_size, 1, 1)
-        M[:, 0, 3] = dx.squeeze(1)
-        M[:, 1, 3] = dy.squeeze(1)
-        M[:, 2, 3] = dz.squeeze(1)
+        shifts = torch.randint(
+            low=-max_shift,
+            high=max_shift + 1,
+            size=(B * T, 2),
+            dtype=torch.float,
+            device=data.device,
+        )
 
-        jittered_image = warp_affine3d(image_t.unsqueeze(1), M, dsize).squeeze(1)
-        return jittered_image
+        M = torch.zeros((B * T, 2, 3), device=data.device, dtype=data.dtype)
+        M[:, 0, 0] = 1.0
+        M[:, 1, 1] = 1.0
+        M[:, :, 2] = shifts  # broadcast tx, ty into last column
+
+        warped = warp_affine(
+            imgs,
+            M,
+            (H, W),
+            mode=mode,
+            padding_mode=padding_mode,
+            align_corners=align_corners,
+        )
+
+        return warped.view(B, T, C, H, W)
 
     return inner
 
@@ -51,7 +72,8 @@ def build_era_image(lat, lon, time, lvl_type, device):
 
 def build_batch(image_fs, lat, lon, device, transform):
     surf_vars = {
-        k: transform(image_fs[0]()[:, :, i].squeeze(axis=2))
+        k: transform(image_fs[0]()[:, :, i]).squeeze(axis=2)
+        # k: transform(image_fs[0]()[:, :, i])
         for i, k in enumerate(("2t", "10u", "10v", "msl"))
     }
     static_vars = {
@@ -107,10 +129,10 @@ def main(args):
     model.eval()
 
     # Hook into a specific layer
-    layer_name = "backbone.encoder_layers.1._checkpoint_wrapped_module.blocks.0.mlp"
+    layer_name = "backbone.encoder_layers.0._checkpoint_wrapped_module.blocks.0.mlp"
     hook = hook_specific_layer(model, layer_name)
 
-    transform = jitter_3d(5, (2, args.lat, args.lon))
+    transform = jitter_3d(5)
 
     # Build ERA image and batch using provided args.
     params, image_fs = build_era_image(
@@ -153,19 +175,36 @@ def main(args):
         constrained_layout=True,  # ← here
         squeeze=False,
     )
+    # for i, (name, var_data) in enumerate(zip(surface_names, surface_vars)):
+    #     for j in range(rollout_steps):
+    #         ax = axes[i, j]
+    #         im = ax.imshow(
+    #             var_data[0, j].detach().cpu().numpy(), cmap="coolwarm", origin="lower"
+    #         )
+    #         ax.set_xlabel("Longitude Index")
+    #         ax.set_ylabel("Latitude Index")
+    #
+    #         if j == 0:
+    #             ax.set_title(f"{name} (t - 1)", pad=10)
+    #         else:
+    #             ax.set_title(f"{name} (t)", pad=10)
+
     for i, (name, var_data) in enumerate(zip(surface_names, surface_vars)):
         for j in range(rollout_steps):
             ax = axes[i, j]
-            im = ax.imshow(
-                var_data[0, j].detach().cpu().numpy(), cmap="coolwarm", origin="lower"
-            )
+
+            # Extract a 2D slice by dropping the channel dimension
+            img = var_data[0, j].detach().cpu().numpy()
+            # Alternatively: img = var_data[0, j].squeeze(0).detach().cpu().numpy()
+
+            im = ax.imshow(img, cmap="coolwarm", origin="lower")
             ax.set_xlabel("Longitude Index")
             ax.set_ylabel("Latitude Index")
 
-            if j == 0:
-                ax.set_title(f"{name} (t - 1)", pad=10)
-            else:
-                ax.set_title(f"{name} (t)", pad=10)
+            title_time = "t - 1" if j == 0 else "t"
+            ax.set_title(f"{name} ({title_time})", pad=10)
+
+    # Overall title
     fig.suptitle(f"{layer_name} - neuron idx: {args.neuron_idx}", fontsize=16)
 
     if args.save_output:
