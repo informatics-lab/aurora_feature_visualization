@@ -1,11 +1,10 @@
 # Aurora Feature Visualisation
-
-**Description/Summary**
+This respository implments [Feature Visualisation via Activation Maximisation](https://distill.pub/2017/feature-visualization/) for the [Aurora](https://github.com/microsoft/aurora/blob/main/aurora/model/aurora.py) model.
 
 ## Set up
 
 ### Environments
-Use the following command to create the **aurora_fv** conda environment:
+Use the following command from the root of the repository to create the **aurora_fv** conda environment:
 ```bash
 conda env create -f requirements.yml
 ```
