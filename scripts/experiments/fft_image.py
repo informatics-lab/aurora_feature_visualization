@@ -11,75 +11,55 @@ def pixel_image(shape, sd=None, device=DEFAULT_DEVICE):
     return [tensor], lambda: tensor
 
 
-# From https://github.com/tensorflow/lucid/blob/master/lucid/optvis/param/spatial.py
-def rfft2d_freqs(h, w):
-    """Computes 2D spectrum frequencies."""
-    fy = np.fft.fftfreq(h)[:, None]
-    # when we have an odd input dimension we need to keep one additional
-    # frequency and later cut off 1 pixel
-    if w % 2 == 1:
-        fx = np.fft.fftfreq(w)[: w // 2 + 2]
-    else:
-        fx = np.fft.fftfreq(w)[: w // 2 + 1]
-    return np.sqrt(fx * fx + fy * fy)
+def rfftn_freqs(shape):
+    """Computes ND spectrum frequencies for real FFT."""
+    ndim = len(shape)
+    freqs = []
+    for i, size in enumerate(shape):
+        if i == ndim - 1:  # Last dimension (real FFT)
+            if size % 2 == 1:
+                freq = np.fft.fftfreq(size)[: size // 2 + 2]
+            else:
+                freq = np.fft.fftfreq(size)[: size // 2 + 1]
+        else:
+            freq = np.fft.fftfreq(size)
+        freqs.append(freq)
+
+    # Create a meshgrid of frequencies
+    mesh = np.meshgrid(*freqs, indexing="ij")
+
+    # Calculate the magnitude of the frequency vector
+    return np.sqrt(np.sum(np.array(mesh) ** 2, axis=0))
 
 
-def fft_image(shape, sd=None, decay_power=1, device=DEFAULT_DEVICE):
-    batch, channels, h, w = shape
-    freqs = rfft2d_freqs(h, w)
+def fft_volume(shape, sd=None, decay_power=1, device=DEFAULT_DEVICE):
+    batch, time, channels, *spatial_dims = shape
+
+    freqs = rfftn_freqs(spatial_dims)
     init_val_size = (
-        (batch, channels) + freqs.shape + (2,)
-    )  # 2 for imaginary and real components
-    sd = sd or 0.01  # sd == standard deviation
+        (batch, time, channels) + freqs.shape + (2,)
+    )  # 2 for real and imaginary
+
+    sd = sd or 0.01
 
     spectrum_real_imag_t = (
         (torch.randn(*init_val_size) * sd).to(device).requires_grad_(True)
     )
 
-    scale = 1.0 / np.maximum(freqs, 1.0 / max(w, h)) ** decay_power
+    max_spatial_dim = max(spatial_dims)
+    scale = 1.0 / np.maximum(freqs, 1.0 / max_spatial_dim) ** decay_power
     scale = torch.tensor(scale).float()[None, None, ..., None].to(device)
 
     def inner():
         scaled_spectrum_t = scale * spectrum_real_imag_t
         if type(scaled_spectrum_t) is not torch.complex64:
             scaled_spectrum_t = torch.view_as_complex(scaled_spectrum_t)
-        image = torch.fft.irfftn(scaled_spectrum_t, s=(h, w), norm="ortho")
+        volume = torch.fft.irfftn(scaled_spectrum_t, s=spatial_dims, norm="ortho")
+        volume = volume[
+            :batch, :time, :channels, *([slice(None, dim) for dim in spatial_dims])
+        ]
         magic = 4.0
-        image = image / magic
-        return image
-
-    return [spectrum_real_imag_t], inner
-
-
-# Split into the magnitude and phase components of the fft
-def fft_image_split(shape, sd=None, decay_power=1, device=DEFAULT_DEVICE):
-    batch, channels, h, w = shape
-    freqs = rfft2d_freqs(h, w)
-    init_val_size = (
-        (batch, channels) + freqs.shape + (2,)
-    )  # 2 for imaginary and real components
-    sd = sd or 0.01  # sd == standard deviation
-
-    spectrum_real_imag_t = (
-        (torch.randn(*init_val_size) * sd).to(device).requires_grad_(True)
-    )
-
-    scale = 1.0 / np.maximum(freqs, 1.0 / max(w, h)) ** decay_power
-    scale = torch.tensor(scale).float()[None, None, ..., None].to(device)
-
-    def inner():
-        scaled_spectrum_t = scale * spectrum_real_imag_t
-        if type(scaled_spectrum_t) is not torch.complex64:
-            scaled_spectrum_t = torch.view_as_complex(scaled_spectrum_t)
-
-        # Compute magnitude and phase
-        magnitude = torch.abs(scaled_spectrum_t)
-        phase = torch.angle(scaled_spectrum_t)
-
-        image = torch.fft.irfftn(scaled_spectrum_t, s=(h, w), norm="ortho")
-        image = image[:batch, :channels, :h, :w]
-        magic = 4.0
-        image = image / magic
-        return image, magnitude, phase
+        volume = volume / magic
+        return volume
 
     return [spectrum_real_imag_t], inner

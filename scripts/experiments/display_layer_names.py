@@ -40,10 +40,10 @@ batch = Batch(
 
 print(layer_names(model))
 
-hook = hook_specific_layer(
-    model, "backbone.encoder_layers.0._checkpoint_wrapped_module.blocks.0.mlp.act"
-)
-
-prediction = model(batch)
-
-print(hook.features)
+# hook = hook_specific_layer(
+#     model, "backbone.encoder_layers.0._checkpoint_wrapped_module.blocks.0.mlp.act"
+# )
+#
+# prediction = model(batch)
+#
+# print(hook.features)
