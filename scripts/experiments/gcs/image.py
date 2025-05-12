@@ -22,7 +22,8 @@ vars_dict = {
 
 lvl_dict = {
     "surf": 1,
-    "atmos": 13,
+    # "atmos": 13,
+    "atmos": 4,
     "static": 1,
 }
 
