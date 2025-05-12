@@ -10,7 +10,7 @@ conda env create -f requirements.yml
 ```
 
 ## Run Scripts
-All of the scripts are designed to be run from the root of the repository and with the aurora_fv conda environment acctivated using the following command:
+All of the scripts are designed to be run from the root of the repository and with the aurora_fv conda environment activated using the following command:
 ```bash
 conda activate aurora_fv
 ```
