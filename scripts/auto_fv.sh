@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Path to your Python script (update if necessary)
-SCRIPT="scripts/experiments/gcs/feature_visualisation_gcs.py"
+SCRIPT="scripts/feature_visualisation/feature_visualisation.py"
 
 for i in {0..14}; do
     echo "Processing neuron index $i..."
