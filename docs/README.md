@@ -5,6 +5,7 @@
 ## Set up
 
 ### Environments
+Use the following command to create the **aurora_fv** conda environment.
 ```bash
 conda env create -f requirements.yml
 ```
@@ -17,14 +18,9 @@ curl https://huggingface.co/microsoft/aurora/resolve/main/aurora-0.25-small-pret
 ```
 
 ## Run Scripts
-Run from root of repo
+All of the scripts are designed to be run from the root of the repository.
 
 ```bash
 conda activate aurora_fv
-python scripts/download_data.py
-```
-
-```bash
-conda activate aurora_fv
-python scripts/aurora_inference.py
+python scripts/experiments/aurora_inference.py
 ```

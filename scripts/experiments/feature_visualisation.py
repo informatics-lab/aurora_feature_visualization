@@ -7,8 +7,7 @@ import matplotlib.pyplot as plt
 from tqdm import trange
 from hooks import hook_specific_layer
 import image
-from kornia.geometry.transform import warp_affine3d, translate, warp_affine
-import numpy as np
+from kornia.geometry.transform import warp_affine
 
 torch.manual_seed(1)
 
@@ -135,8 +134,7 @@ def main(args):
     model.eval()
 
     # Hook into a specific layer
-    layer_name = "backbone.encoder_layers.0._checkpoint_wrapped_module.blocks.0.mlp"
-    hook = hook_specific_layer(model, layer_name)
+    hook = hook_specific_layer(model, args.layer_name)
 
     transform = jitter_3d(5)
 
@@ -181,29 +179,12 @@ def main(args):
         constrained_layout=True,  # ← here
         squeeze=False,
     )
-    # for i, (name, var_data) in enumerate(zip(surface_names, surface_vars)):
-    #     for j in range(rollout_steps):
-    #         ax = axes[i, j]
-    #         im = ax.imshow(
-    #             var_data[0, j].detach().cpu().numpy(), cmap="coolwarm", origin="lower"
-    #         )
-    #         ax.set_xlabel("Longitude Index")
-    #         ax.set_ylabel("Latitude Index")
-    #
-    #         if j == 0:
-    #             ax.set_title(f"{name} (t - 1)", pad=10)
-    #         else:
-    #             ax.set_title(f"{name} (t)", pad=10)
-
     for i, (name, var_data) in enumerate(zip(surface_names, surface_vars)):
         for j in range(rollout_steps):
             ax = axes[i, j]
 
-            # Extract a 2D slice by dropping the channel dimension
             img = var_data[0, j].detach().cpu().numpy()
-            # Alternatively: img = var_data[0, j].squeeze(0).detach().cpu().numpy()
-
-            im = ax.imshow(img, cmap="coolwarm", origin="lower")
+            _ = ax.imshow(img, cmap="coolwarm", origin="lower")
             ax.set_xlabel("Longitude Index")
             ax.set_ylabel("Latitude Index")
 
@@ -211,11 +192,11 @@ def main(args):
             ax.set_title(f"{name} ({title_time})", pad=10)
 
     # Overall title
-    fig.suptitle(f"{layer_name} - neuron idx: {args.neuron_idx}", fontsize=16)
+    fig.suptitle(f"{args.layer_name} - neuron idx: {args.neuron_idx}", fontsize=16)
 
     if args.save_output:
         # Replace periods in the layer name to create a safe folder name.
-        safe_layer_name = layer_name.replace(".", "_")
+        safe_layer_name = args.layer_name.replace(".", "_")
         output_dir = os.path.join(
             "data", "output_data", "feature_visualizations", f"{safe_layer_name}"
         )
@@ -231,7 +212,15 @@ def main(args):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Aurora Model Neuron Optimization")
+    parser = argparse.ArgumentParser(
+        description="Aurora Model Neuron Optimization", add_help=True
+    )
+    parser.add_argument(
+        "--layer_name",
+        type=str,
+        default="backbone.encoder_layers.0._checkpoint_wrapped_module.blocks.0.mlp",
+        help="Name of the layer to optimize",
+    )
     parser.add_argument(
         "--neuron_idx", type=int, default=1, help="Index of the neuron to optimize"
     )
