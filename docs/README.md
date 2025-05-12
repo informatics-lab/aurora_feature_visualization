@@ -16,12 +16,12 @@ All of the scripts are designed to be run from the root of the repository.
 To run the script with the default arguments, use the following command:
 ```bash
 conda activate aurora_fv
-python src/aurora_inference.py
+python src/feature_visualisation.py
 ```
 
 Use the --help / -h argument to see the available parameters to select the targeted layer, neuron, save directory, to not display the plot, etc.
 ```bash
-python src/aurora_inference.py --help
+python src/feature_visualisation.py --help
 ```
 
 
