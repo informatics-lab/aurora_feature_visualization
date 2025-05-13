@@ -1,5 +1,5 @@
 # Aurora Feature Visualisation
-This respository implments [Feature Visualisation via Activation Maximisation](https://distill.pub/2017/feature-visualization/) for the [Aurora](https://github.com/microsoft/aurora/blob/main/aurora/model/aurora.py) model.
+This respository implements [Feature Visualisation via Activation Maximisation](https://distill.pub/2017/feature-visualization/) for the [Aurora](https://github.com/microsoft/aurora/blob/main/aurora/model/aurora.py) model.
 
 ## Set up
 
