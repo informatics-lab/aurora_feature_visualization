@@ -8,6 +8,7 @@ from tqdm import trange
 from hooks import hook_specific_layer
 import image
 from kornia.geometry.transform import warp_affine
+import numpy as np
 
 
 def jitter_3d(max_shift):
@@ -153,7 +154,7 @@ def main(args):
     for _ in pbar:
         optimizer.zero_grad()
         batch = build_batch(image_fs, args.lat, args.lon, device, transform)
-        predictions = model(batch)
+        _ = model(batch)
 
         # Compute loss using the neuron index from arguments.
         loss = -hook.features[:, :, args.neuron_idx].mean()
