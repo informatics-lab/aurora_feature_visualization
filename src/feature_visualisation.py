@@ -9,10 +9,6 @@ from hooks import hook_specific_layer
 import image
 from kornia.geometry.transform import warp_affine
 
-torch.manual_seed(1)
-
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
 
 def jitter_3d(max_shift):
     mode = "bilinear"
@@ -123,6 +119,10 @@ def neuron_loss(tensor: torch.Tensor, neuron_idx: int) -> torch.Tensor:
 
 
 def main(args):
+    torch.manual_seed(args.seed)
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
     # Load the model and move to the chosen device.
     model = AuroraSmall(
         use_lora=False,  # Model was not fine-tuned.
@@ -223,6 +223,9 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--neuron_idx", type=int, default=1, help="Index of the neuron to optimize"
+    )
+    parser.add_argument(
+        "--seed", type=int, default=0, help="The seed to initialise the PRNG"
     )
     parser.add_argument(
         "--n_epochs", type=int, default=300, help="Number of training epochs"
