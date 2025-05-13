@@ -6,50 +6,8 @@ from aurora import AuroraSmall, Batch, Metadata
 import matplotlib.pyplot as plt
 from tqdm import trange
 from hooks import hook_specific_layer
+from transform import jitter_3d
 import image
-from kornia.geometry.transform import warp_affine
-import numpy as np
-
-
-def jitter_3d(max_shift):
-    mode = "bilinear"
-    padding_mode = "border"
-    align_corners = True
-
-    def inner(
-        data: torch.Tensor,
-    ) -> torch.Tensor:
-        assert data.ndim == 5 and data.shape[0] == 1 and data.shape[2] == 1, (
-            "Expected shape (1, T, 1, H, W)"
-        )
-        B, T, C, H, W = data.shape
-        imgs = data.view(B * T, C, H, W)
-
-        shifts = torch.randint(
-            low=-max_shift,
-            high=max_shift + 1,
-            size=(B * T, 2),
-            dtype=torch.float,
-            device=data.device,
-        )
-
-        M = torch.zeros((B * T, 2, 3), device=data.device, dtype=data.dtype)
-        M[:, 0, 0] = 1.0
-        M[:, 1, 1] = 1.0
-        M[:, :, 2] = shifts  # broadcast tx, ty into last column
-
-        warped = warp_affine(
-            imgs,
-            M,
-            (H, W),
-            mode=mode,
-            padding_mode=padding_mode,
-            align_corners=align_corners,
-        )
-
-        return warped.view(B, T, C, H, W)
-
-    return inner
 
 
 def build_era_image(lat, lon, time, lvl_type, device):
@@ -69,7 +27,6 @@ def build_era_image(lat, lon, time, lvl_type, device):
 def build_batch(image_fs, lat, lon, device, transform):
     surf_vars = {
         k: transform(image_fs[0]()[:, :, i]).squeeze(axis=2)
-        # k: transform(image_fs[0]()[:, :, i])
         for i, k in enumerate(("2t", "10u", "10v", "msl"))
     }
     static_vars = {
@@ -89,21 +46,6 @@ def build_batch(image_fs, lat, lon, device, transform):
             lat=torch.linspace(90, -90, lat, device=device),
             lon=torch.linspace(0, 360, lon + 1, device=device)[:-1],
             time=(datetime(2020, 6, 1, 12, 0),),
-            # atmos_levels=(
-            #     50,
-            #     100,
-            #     150,
-            #     200,
-            #     250,
-            #     300,
-            #     400,
-            #     500,
-            #     600,
-            #     700,
-            #     850,
-            #     925,
-            #     1000,
-            # ),
             atmos_levels=(
                 700,
                 850,
@@ -116,7 +58,7 @@ def build_batch(image_fs, lat, lon, device, transform):
 
 
 def neuron_loss(tensor: torch.Tensor, neuron_idx: int) -> torch.Tensor:
-    return -tensor[:, :, :, neuron_idx].mean()
+    return -tensor[:, :, neuron_idx].mean()
 
 
 def main(args):
@@ -124,28 +66,24 @@ def main(args):
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # Load the model and move to the chosen device.
     model = AuroraSmall(
-        use_lora=False,  # Model was not fine-tuned.
-        autocast=True,  # Use AMP.
+        use_lora=False,
+        autocast=True,
     )
     model.load_checkpoint("microsoft/aurora", "aurora-0.25-small-pretrained.ckpt")
     model.configure_activation_checkpointing()
     model.to(device)
     model.eval()
 
-    # Hook into a specific layer
     hook = hook_specific_layer(model, args.layer_name)
 
     transform = jitter_3d(5)
+    loss_fn = neuron_loss
 
-    # Build ERA image and batch using provided args.
+    # Build ERA image
     params, image_fs = build_era_image(
         args.lat, args.lon, args.time, args.lvl_type, device
     )
-    batch = build_batch(image_fs, args.lat, args.lon, device, transform)
-
-    # Define optimizer for the input data
     optimizer = torch.optim.Adam(
         params, lr=args.learning_rate, betas=(0.5, 0.99), eps=1e-8
     )
@@ -157,13 +95,12 @@ def main(args):
         _ = model(batch)
 
         # Compute loss using the neuron index from arguments.
-        loss = -hook.features[:, :, args.neuron_idx].mean()
+        loss = loss_fn(hook.features, args.neuron_idx)
 
         loss.backward()
         optimizer.step()
         pbar.set_description(f"loss: {loss:.2f}")
 
-    # Generate rollout visualization
     batch = build_batch(image_fs, args.lat, args.lon, device, transform)
     rollout_steps = 2
     surface_names = ["2t", "10u", "10v", "msl"]
@@ -177,7 +114,7 @@ def main(args):
         len(surface_vars),
         rollout_steps,
         figsize=(15, len(surface_vars) * 4),
-        constrained_layout=True,  # ← here
+        constrained_layout=True,
         squeeze=False,
     )
     for i, (name, var_data) in enumerate(zip(surface_names, surface_vars)):
@@ -192,7 +129,6 @@ def main(args):
             title_time = "t - 1" if j == 0 else "t"
             ax.set_title(f"{name} ({title_time})", pad=10)
 
-    # Overall title
     fig.suptitle(f"{args.layer_name} - neuron idx: {args.neuron_idx}", fontsize=16)
 
     if args.save_output:
